@@ -2,9 +2,11 @@ package lspmux
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"os"
 	"os/exec"
+	"strings"
 
 	"golang.org/x/exp/jsonrpc2"
 )
@@ -26,7 +28,8 @@ func Start(ctx context.Context, cfg *Config) error {
 	}
 	defer clientConn.Close()
 
-	for _, lsp := range cfg.LSPS {
+	for name, lsp := range cfg.LSPS {
+		slog.Info(fmt.Sprintf("starting lsp server: %s: %s", name, strings.Join(append([]string{lsp.Command}, lsp.Args...), " ")))
 		serverPipe, err := NewCmdPipeListener(ctx, exec.CommandContext(ctx, lsp.Command, lsp.Args...))
 		if err != nil {
 			return err

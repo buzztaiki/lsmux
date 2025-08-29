@@ -14,8 +14,8 @@ func NewIOPipeListener(ctx context.Context, r io.Reader, w io.Writer) (jsonrpc2.
 	if err != nil {
 		return nil, err
 	}
-	go bindIOToListener(ctx, pipe, r, w)
 
+	go bindIOToListener(ctx, pipe, r, w)
 	return pipe, nil
 }
 
@@ -24,14 +24,22 @@ func NewCmdPipeListener(ctx context.Context, cmd *exec.Cmd) (jsonrpc2.Listener, 
 	if err != nil {
 		return nil, err
 	}
-	defer pipe.Close()
 
-	go bindCmdToListener(ctx, pipe, cmd)
+	stdin, err := cmd.StdinPipe()
+	if err != nil {
+		return nil, err
+	}
+	stdout, err := cmd.StdoutPipe()
+	if err != nil {
+		return nil, err
+	}
 	cmd.Stderr = os.Stderr
+
 	if err := cmd.Start(); err != nil {
 		return nil, err
 	}
 
+	go bindIOToListener(ctx, pipe, stdout, stdin)
 	return pipe, nil
 }
 
@@ -43,17 +51,4 @@ func bindIOToListener(ctx context.Context, l jsonrpc2.Listener, r io.Reader, w i
 	go io.Copy(rwc, r)
 	go io.Copy(w, rwc)
 	return nil
-}
-
-func bindCmdToListener(ctx context.Context, l jsonrpc2.Listener, cmd *exec.Cmd) error {
-	stdinPipe, err := cmd.StdinPipe()
-	if err != nil {
-		return err
-	}
-	stdoutPipe, err := cmd.StdoutPipe()
-	if err != nil {
-		return err
-	}
-
-	return bindIOToListener(ctx, l, stdoutPipe, stdinPipe)
 }
