@@ -1,14 +1,15 @@
 package main
 
 import (
-	"context"
+	"fmt"
+	"os"
 
 	"github.com/buzztaiki/lspmux"
 )
 
 func main() {
-	ctx := context.Background()
-	if err := lspmux.Start(ctx); err != nil {
-		panic(err)
+	if err := lspmux.CLI(); err != nil {
+		fmt.Fprintf(os.Stderr, "%s: error: %v\n", os.Args[0], err)
+		os.Exit(1)
 	}
 }

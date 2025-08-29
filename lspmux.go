@@ -18,12 +18,6 @@ func Start(ctx context.Context, cfg *Config) error {
 	}
 	defer clientPipe.Close()
 
-	serverPipe, err := NewCmdPipeListener(ctx, exec.CommandContext(ctx, "gopls"))
-	if err != nil {
-		return err
-	}
-	defer serverPipe.Close()
-
 	clientHandler := NewClientHandler()
 	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(),
 		jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: clientHandler})
@@ -32,16 +26,25 @@ func Start(ctx context.Context, cfg *Config) error {
 	}
 	defer clientConn.Close()
 
-	serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(),
-		jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: NewServerHandler(clientConn)})
-	if err != nil {
-		return err
-	}
-	defer serverConn.Close()
-	clientHandler.SetServerConn(serverConn)
+	for _, lsp := range cfg.LSPS {
+		serverPipe, err := NewCmdPipeListener(ctx, exec.CommandContext(ctx, lsp.Command, lsp.Args...))
+		if err != nil {
+			return err
+		}
+		defer serverPipe.Close()
 
-	slog.Info("server started")
-	serverConn.Wait()
+		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(),
+			jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: NewServerHandler(clientConn)})
+		if err != nil {
+			return err
+		}
+		defer serverConn.Close()
+
+		clientHandler.AddServerConn(serverConn)
+	}
+	slog.Info("lspmux started")
+
+	// TODO wait server connections
 	clientConn.Wait()
 
 	return nil

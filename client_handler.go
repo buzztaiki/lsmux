@@ -9,29 +9,34 @@ import (
 )
 
 type ClientHandler struct {
-	serverConn *jsonrpc2.Connection
+	serverConns []*jsonrpc2.Connection
 }
 
 func NewClientHandler() *ClientHandler {
 	return &ClientHandler{}
 }
 
-func (h *ClientHandler) SetServerConn(conn *jsonrpc2.Connection) {
-	h.serverConn = conn
+func (h *ClientHandler) AddServerConn(conn *jsonrpc2.Connection) {
+	h.serverConns = append(h.serverConns, conn)
 }
 
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	logger := slog.With("component", "ClientHandler", "method", r.Method, "id", r.ID)
 	logger.Info("handle")
 
-	if !r.IsCall() {
-		return nil, h.serverConn.Notify(ctx, r.Method, r.Params)
+	// TODO
+	for _, conn := range h.serverConns[:1] {
+		if !r.IsCall() {
+			return nil, conn.Notify(ctx, r.Method, r.Params)
+		}
+
+		var res json.RawMessage
+		if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &res); err != nil {
+			logger.Error("call error", "error", err)
+			return nil, err
+		}
+		return res, nil
 	}
 
-	var res json.RawMessage
-	if err := h.serverConn.Call(ctx, r.Method, r.Params).Await(ctx, &res); err != nil {
-		logger.Error("call error", "error", err)
-		return nil, err
-	}
-	return res, nil
+	return nil, jsonrpc2.ErrNotHandled
 }
