@@ -19,7 +19,7 @@ func NewServerHandler(clientConn *jsonrpc2.Connection) *ServerHandler {
 }
 
 func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	logger := slog.With("component", "ServerHandler", "method", r.Method, "id", r.ID, "isCall", r.IsCall())
+	logger := slog.With("component", "ServerHandler", "method", r.Method, "id", r.ID, "call", r.IsCall())
 	logger.Info("handle")
 
 

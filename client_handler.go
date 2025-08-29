@@ -21,11 +21,10 @@ func (h *ClientHandler) AddServerConn(conn *jsonrpc2.Connection) {
 }
 
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	logger := slog.With("component", "ClientHandler", "method", r.Method, "id", r.ID)
+	logger := slog.With("component", "ClientHandler", "method", r.Method, "id", r.ID, "call", r.IsCall())
 	logger.Info("handle")
 
-	// TODO
-	for _, conn := range h.serverConns[:1] {
+	for _, conn := range h.serverConns {
 		if !r.IsCall() {
 			return nil, conn.Notify(ctx, r.Method, r.Params)
 		}
