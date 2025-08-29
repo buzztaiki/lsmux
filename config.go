@@ -7,6 +7,9 @@ import (
 )
 
 type Config struct {
+	// TODO init args
+	// TODO lsp server selection
+	// TODO request priority / merge policy
 	LSPS map[string]struct {
 		Command string   `yaml:"command"`
 		Args    []string `yaml:"args"`
