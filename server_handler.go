@@ -29,7 +29,6 @@ func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 
 	var res json.RawMessage
 	if err := h.clientConn.Call(ctx, r.Method, r.Params).Await(ctx, &res); err != nil {
-		logger.Error("call error", "error", err)
 		return nil, err
 	}
 	return res, nil
