@@ -10,21 +10,34 @@ import (
 )
 
 type ClientHandler struct {
+	// TODO add server name to connection for better logging
 	serverConns []*jsonrpc2.Connection
+	ready 	 chan(struct{})
+	nservers int
 }
 
-func NewClientHandler() *ClientHandler {
-	return &ClientHandler{}
+func NewClientHandler(nservers int) *ClientHandler {
+	return &ClientHandler{
+		ready: make(chan struct{}),
+		nservers: nservers,
+	}
 }
 
 func (h *ClientHandler) AddServerConn(conn *jsonrpc2.Connection) {
-	h.serverConns = append(h.serverConns, conn)
+	if len(h.serverConns) < h.nservers {
+		h.serverConns = append(h.serverConns, conn)
+	}
+	if len(h.serverConns) == h.nservers {
+		close(h.ready)
+	}
 }
 
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	// TODO logger and logging middlere
-	logger := slog.With("component", "ClientHandler", "method", r.Method, "id", r.ID, "call", r.IsCall())
+	logger := slog.With("component", "ClientHandler", "method", r.Method, "id", r.ID.Raw(), "type", RequestType(r))
 	logger.Info("handle")
+
+	<-h.ready
 
 	switch r.Method {
 	case "initialize":
@@ -36,9 +49,14 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			}
 			mergo.Merge(&merged, res["capabilities"])
 		}
-		return merged, nil
+		return map[string]any{
+			"serverInfo": map[string]any{
+				"name": "lspmux", // TODO configurable
+			},
+			"capabilities": merged,
+		}, nil
 
-	// TODO Capability
+	// TODO Check capability
 	default:
 		if !r.IsCall() {
 			for _, conn := range h.serverConns {

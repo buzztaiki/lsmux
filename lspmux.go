@@ -20,7 +20,7 @@ func Start(ctx context.Context, cfg *Config) error {
 	}
 	defer clientPipe.Close()
 
-	clientHandler := NewClientHandler()
+	clientHandler := NewClientHandler(len(cfg.LSPS))
 	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(),
 		jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: clientHandler})
 	if err != nil {
@@ -37,7 +37,7 @@ func Start(ctx context.Context, cfg *Config) error {
 		defer serverPipe.Close()
 
 		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(),
-			jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: NewServerHandler(clientConn)})
+			jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: NewServerHandler(clientConn, name)})
 		if err != nil {
 			return err
 		}
