@@ -4,12 +4,14 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"slices"
 
 	"dario.cat/mergo"
 	"github.com/myleshyson/lsprotocol-go/protocol"
 	"golang.org/x/exp/jsonrpc2"
+	"golang.org/x/sync/errgroup"
 )
 
 type ClientHandler struct {
@@ -88,6 +90,8 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 	switch method {
 	case protocol.WorkspaceExecuteCommandMethod:
 		return h.handleExecuteCommandRequest(ctx, r, serverConns, logger)
+	case protocol.TextDocumentCompletionMethod:
+		return h.handleCompletionRequest(ctx, r, serverConns, logger)
 
 	default:
 		// Currently, request is sent to the first server only
@@ -113,6 +117,59 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 	}
 
 	return nil, ErrMethodNotFound
+}
+
+func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
+	return CallRequestAsync(r, h.conn, func() (any, error) {
+		return h.handleCompletionRequestSync(ctx, r, serverConns, logger)
+	}, logger)
+}
+
+func (h *ClientHandler) handleCompletionRequestSync(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
+	g := new(errgroup.Group)
+	results := SliceFor(protocol.CompletionResponse{}.Result, len(serverConns))
+	for i, conn := range serverConns {
+		g.Go(func() error {
+			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
+				return err
+			}
+			logger.Info("completion result received", "server", conn.name, "resultType", fmt.Sprintf("%T", results[i].Value))
+			return nil
+		})
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	logger.Info("all completion results received")
+
+	var res protocol.CompletionList
+
+	for _, r := range results {
+		if v, ok := r.Value.(protocol.CompletionList); ok {
+			mergo.Merge(&res, v)
+		}
+	}
+
+	res.Items = []protocol.CompletionItem{}
+	for i, r := range results {
+		switch v := r.Value.(type) {
+		case []protocol.CompletionItem:
+			logger.Info("completion items", "server", serverConns[i].name, "nitems", len(v))
+			res.Items = append(res.Items, v...)
+		case protocol.CompletionList:
+			logger.Info("completion items", "server", serverConns[i].name, "nitems", len(v.Items))
+			res.Items = append(res.Items, v.Items...)
+		case nil:
+		// do nothing
+		default:
+			panic(fmt.Sprintf("invalid completion result type: %T", v))
+		}
+	}
+
+	return &res, nil
 }
 
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, logger *slog.Logger) (any, error) {
