@@ -9,21 +9,20 @@ import (
 )
 
 type ServerHandler struct {
+	name       string
 	clientConn *jsonrpc2.Connection
-	lspName string
 }
 
-func NewServerHandler(clientConn *jsonrpc2.Connection, lspName string) *ServerHandler {
+func NewServerHandler(name string, clientConn *jsonrpc2.Connection) *ServerHandler {
 	return &ServerHandler{
+		name:       name,
 		clientConn: clientConn,
-		lspName: lspName,
 	}
 }
 
 func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	logger := slog.With("component", "ServerHandler", "method", r.Method, "id", r.ID.Raw(), "type", RequestType(r), "lsp", h.lspName)
+	logger := slog.With("component", "ServerHandler", "method", r.Method, "id", r.ID.Raw(), "type", RequestType(r), "name", h.name)
 	logger.Info("handle")
-
 
 	if !r.IsCall() {
 		return nil, h.clientConn.Notify(ctx, r.Method, r.Params)

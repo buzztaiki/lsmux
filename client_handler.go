@@ -3,6 +3,7 @@ package lspmux
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 
 	"dario.cat/mergo"
@@ -11,24 +12,31 @@ import (
 
 type ClientHandler struct {
 	// TODO add server name to connection for better logging
-	serverConns []*jsonrpc2.Connection
-	ready 	 chan(struct{})
-	nservers int
+	serverConns []*serverConn
+	ready       chan (struct{})
+	nservers    int
+}
+
+type serverConn struct {
+	name string
+	*jsonrpc2.Connection
+	supportedCaps map[string]struct{}
 }
 
 func NewClientHandler(nservers int) *ClientHandler {
 	return &ClientHandler{
-		ready: make(chan struct{}),
+		ready:    make(chan struct{}),
 		nservers: nservers,
 	}
 }
 
-func (h *ClientHandler) AddServerConn(conn *jsonrpc2.Connection) {
+func (h *ClientHandler) AddServerConn(name string, conn *jsonrpc2.Connection) {
 	if len(h.serverConns) < h.nservers {
-		h.serverConns = append(h.serverConns, conn)
+		h.serverConns = append(h.serverConns, &serverConn{name, conn, nil})
 	}
 	if len(h.serverConns) == h.nservers {
 		close(h.ready)
+		slog.Info("all server connections established")
 	}
 }
 
@@ -47,8 +55,17 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &res); err != nil {
 				return nil, err
 			}
-			mergo.Merge(&merged, res["capabilities"])
+
+			caps, ok := res["capabilities"].(map[string]any)
+			if !ok {
+				return nil, errors.New("no capabilities in initialize response")
+			}
+
+			mergo.Merge(&merged, caps)
+			conn.supportedCaps = CollectSupportedCapabilities(caps)
+			logger.Info("supported server capabilities", "server", conn.name, "capabilities", conn.supportedCaps)
 		}
+
 		return map[string]any{
 			"serverInfo": map[string]any{
 				"name": "lspmux", // TODO configurable
@@ -56,10 +73,20 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			"capabilities": merged,
 		}, nil
 
-	// TODO Check capability
 	default:
+		serverConns := []*serverConn{}
+		for _, conn := range h.serverConns {
+			if _, ok := conn.supportedCaps[r.Method]; ok {
+				serverConns = append(serverConns, conn)
+			}
+		}
+
+		if len(serverConns) == 0 {
+			return nil, ErrMethodNotFound
+		}
+
 		if !r.IsCall() {
-			for _, conn := range h.serverConns {
+			for _, conn := range serverConns {
 				if err := conn.Notify(ctx, r.Method, r.Params); err != nil {
 					return nil, err
 				}
@@ -71,7 +98,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		// Currently, request is sent to the first server only
 		// TODO Some methods should have their results merged
 		// TODO It would be nice if we could set how each method behaves
-		conn := h.serverConns[0]
+		conn := serverConns[0]
 		if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &res); err != nil {
 			return nil, err
 		}
