@@ -1,22 +1,28 @@
 package lspmux
 
 import (
+	"fmt"
 	"os"
+	"slices"
 
 	"github.com/goccy/go-yaml"
 )
 
 type Config struct {
 	// TODO init args
-	// TODO lsp server selection
 	// TODO request priority / merge policy
-	Servers map[string]struct {
-		Command string   `yaml:"command"`
-		Args    []string `yaml:"args"`
-	}
+	Servers []ServerConfig `yaml:"servers"` // use slice to respect config order
 }
 
-func LoadConfig(fname string) (*Config, error) {
+type ServerConfig struct {
+	Name    string   `yaml:"name"`
+	Command string   `yaml:"command"`
+	Args    []string `yaml:"args"`
+}
+
+type ServerConfigList []ServerConfig
+
+func LoadConfig(fname string, serverNames []string) (*Config, error) {
 	data, err := os.ReadFile(fname)
 	if err != nil {
 		return nil, err
@@ -26,5 +32,20 @@ func LoadConfig(fname string) (*Config, error) {
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}
+
+	if len(serverNames) == 0 {
+		return &cfg, nil
+	}
+
+	var servers []ServerConfig
+	for _, name := range serverNames {
+		i := slices.IndexFunc(cfg.Servers, func(s ServerConfig) bool { return s.Name == name })
+		if i == -1 {
+			return nil, fmt.Errorf("server not found in config: %s", name)
+		}
+		servers = append(servers, cfg.Servers[i])
+	}
+	cfg.Servers = servers
+
 	return &cfg, err
 }

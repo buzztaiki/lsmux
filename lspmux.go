@@ -32,8 +32,8 @@ func Start(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("no servers configured")
 	}
 
-	for name, serverCfg := range cfg.Servers {
-		slog.Info(fmt.Sprintf("starting lsp server: %s: %s", name, strings.Join(append([]string{serverCfg.Command}, serverCfg.Args...), " ")))
+	for _, serverCfg := range cfg.Servers {
+		slog.Info(fmt.Sprintf("starting lsp server: %s: %s", serverCfg.Name, strings.Join(append([]string{serverCfg.Command}, serverCfg.Args...), " ")))
 		serverPipe, err := NewCmdPipeListener(ctx, exec.CommandContext(ctx, serverCfg.Command, serverCfg.Args...))
 		if err != nil {
 			return err
@@ -41,13 +41,13 @@ func Start(ctx context.Context, cfg *Config) error {
 		defer serverPipe.Close()
 
 		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(),
-			jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: NewServerHandler(name, clientConn)})
+			jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: NewServerHandler(serverCfg.Name, clientConn)})
 		if err != nil {
 			return err
 		}
 		defer serverConn.Close()
 
-		clientHandler.AddServerConn(name, serverConn)
+		clientHandler.AddServerConn(serverCfg.Name, serverConn)
 	}
 	slog.Info("lspmux started")
 
