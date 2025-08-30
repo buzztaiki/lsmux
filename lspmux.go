@@ -29,6 +29,7 @@ func Start(ctx context.Context, cfg *Config) error {
 		return fmt.Errorf("no servers configured")
 	}
 
+	diagRegistry := NewDiagnosticRegistry()
 	for _, serverCfg := range cfg.Servers {
 		slog.Info(fmt.Sprintf("starting lsp server: %s: %s", serverCfg.Name, strings.Join(append([]string{serverCfg.Command}, serverCfg.Args...), " ")))
 		serverPipe, err := NewCmdPipeListener(ctx, exec.CommandContext(ctx, serverCfg.Command, serverCfg.Args...))
@@ -37,7 +38,7 @@ func Start(ctx context.Context, cfg *Config) error {
 		}
 		defer serverPipe.Close()
 
-		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), NewBinder(NewServerHandler(serverCfg.Name, clientConn)))
+		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), NewBinder(NewServerHandler(serverCfg.Name, clientConn, diagRegistry)))
 		if err != nil {
 			return err
 		}

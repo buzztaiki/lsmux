@@ -2,21 +2,25 @@ package lspmux
 
 import (
 	"context"
+	"encoding/json"
 	"log/slog"
 
+	"github.com/myleshyson/lsprotocol-go/protocol"
 	"golang.org/x/exp/jsonrpc2"
 )
 
 type ServerHandler struct {
-	name       string
-	conn       Respondable
-	clientConn Callable
+	name         string
+	conn         Respondable
+	clientConn   Callable
+	diagRegistry *DiagnosticRegistry
 }
 
-func NewServerHandler(name string, clientConn *jsonrpc2.Connection) *ServerHandler {
+func NewServerHandler(name string, clientConn *jsonrpc2.Connection, diagRegistry *DiagnosticRegistry) *ServerHandler {
 	return &ServerHandler{
-		name:       name,
-		clientConn: clientConn,
+		name:         name,
+		clientConn:   clientConn,
+		diagRegistry: diagRegistry,
 	}
 }
 
@@ -28,11 +32,35 @@ func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 	logger := slog.With("component", "ServerHandler", "method", r.Method, "id", r.ID.Raw(), "type", RequestType(r), "name", h.name)
 	logger.Info("handle")
 
+	method := protocol.MethodKind(r.Method)
+
 	if !r.IsCall() {
-		return nil, h.clientConn.Notify(ctx, r.Method, r.Params)
+		switch method {
+		case protocol.TextDocumentPublishDiagnosticsMethod:
+			return nil, h.handlePublishDiagnosticsNotification(ctx, r, logger)
+		default:
+			return nil, h.clientConn.Notify(ctx, r.Method, r.Params)
+		}
 	}
 
 	return HandleRequestAsAsync(r, h.conn, func() (any, error) {
 		return ForwardRequest(ctx, r, h.clientConn, logger)
 	}, logger)
+}
+
+func (h *ServerHandler) handlePublishDiagnosticsNotification(ctx context.Context, r *jsonrpc2.Request, logger *slog.Logger) error {
+	var params protocol.PublishDiagnosticsParams
+	if err := json.Unmarshal(r.Params, &params); err != nil {
+		return err
+	}
+
+	logger.Info("server diags", "ndiags", len(params.Diagnostics))
+
+	h.diagRegistry.UpdateDiagnostics(params.Uri, h.name, params.Diagnostics)
+	params.Diagnostics = h.diagRegistry.GetDiagnostics(params.Uri)
+
+	logger.Info("file diags", "ndiags", len(h.diagRegistry.GetDiagnostics(params.Uri)))
+	logger.Info("return diags", "ndiags", len(params.Diagnostics), "data", params.Diagnostics)
+
+	return h.clientConn.Notify(ctx, r.Method, params)
 }
