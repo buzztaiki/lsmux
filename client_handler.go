@@ -93,6 +93,8 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			return h.handleExecuteCommandRequest(ctx, r, serverConns, logger)
 		case protocol.TextDocumentCompletionMethod:
 			return h.handleCompletionRequest(ctx, r, serverConns, logger)
+		case protocol.TextDocumentCodeActionMethod:
+			return h.handleCodeActionRequest(ctx, r, serverConns, logger)
 
 		default:
 			// Currently, request is sent to the first server only
@@ -130,7 +132,7 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
 				return err
 			}
-			logger.Info("completion result received", "server", conn.name, "resultType", fmt.Sprintf("%T", results[i].Value))
+			logger.Info("completion result received", "server", conn.name)
 			return nil
 		})
 		if err := g.Wait(); err != nil {
@@ -164,6 +166,34 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 		default:
 			panic(fmt.Sprintf("invalid completion result type: %T", v))
 		}
+	}
+
+	return &res, nil
+}
+
+func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
+	g := new(errgroup.Group)
+	results := SliceFor(protocol.CodeActionResponse{}.Result, len(serverConns))
+	for i, conn := range serverConns {
+		g.Go(func() error {
+			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
+				return err
+			}
+			logger.Info("codeAction result received", "server", conn.name)
+			return nil
+		})
+		if err := g.Wait(); err != nil {
+			return nil, err
+		}
+	}
+	if err := g.Wait(); err != nil {
+		return nil, err
+	}
+	logger.Info("all codeAction results received")
+
+	res := OrZeroValue(protocol.CodeActionResponse{}.Result)
+	for _, r := range results {
+		res = append(res, OrZeroValue(r)...)
 	}
 
 	return &res, nil
