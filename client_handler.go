@@ -87,19 +87,22 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, nil
 	}
 
-	switch method {
-	case protocol.WorkspaceExecuteCommandMethod:
-		return h.handleExecuteCommandRequest(ctx, r, serverConns, logger)
-	case protocol.TextDocumentCompletionMethod:
-		return h.handleCompletionRequest(ctx, r, serverConns, logger)
+	return HandleRequestAsAsync(r, h.conn, func() (any, error) {
+		switch method {
+		case protocol.WorkspaceExecuteCommandMethod:
+			return h.handleExecuteCommandRequest(ctx, r, serverConns, logger)
+		case protocol.TextDocumentCompletionMethod:
+			return h.handleCompletionRequest(ctx, r, serverConns, logger)
 
-	default:
-		// Currently, request is sent to the first server only
-		// TODO Some methods should have their results merged
-		// TODO It would be nice if we could set how each method behaves
-		conn := serverConns[0]
-		return ForwardRequestAsync(ctx, r, conn, h.conn, logger.With("server", conn.name))
-	}
+		default:
+			// Currently, request is sent to the first server only
+			// TODO Some methods should have their results merged
+			// TODO It would be nice if we could set how each method behaves
+			conn := serverConns[0]
+			return ForwardRequest(ctx, r, conn, logger.With("server", conn.name))
+		}
+	}, logger)
+
 }
 
 func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
@@ -113,19 +116,13 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 			continue
 		}
 
-		return ForwardRequestAsync(ctx, r, conn, h.conn, logger.With("command", params.Command, "server", conn.name))
+		return ForwardRequest(ctx, r, conn, logger.With("command", params.Command, "server", conn.name))
 	}
 
 	return nil, ErrMethodNotFound
 }
 
 func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
-	return CallRequestAsync(r, h.conn, func() (any, error) {
-		return h.handleCompletionRequestSync(ctx, r, serverConns, logger)
-	}, logger)
-}
-
-func (h *ClientHandler) handleCompletionRequestSync(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
 	g := new(errgroup.Group)
 	results := SliceFor(protocol.CompletionResponse{}.Result, len(serverConns))
 	for i, conn := range serverConns {

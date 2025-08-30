@@ -29,32 +29,14 @@ func ForwardRequest(ctx context.Context, r *jsonrpc2.Request, callTo Callable, l
 	return res, nil
 }
 
-func ForwardRequestAsync(ctx context.Context, r *jsonrpc2.Request, callTo Callable, respondTo Respondable, logger *slog.Logger) (any, error) {
-	logger.Info("forwarding request async")
-	call := callTo.Call(ctx, r.Method, r.Params)
+func HandleRequestAsAsync(r *jsonrpc2.Request, respondTo Respondable, call func() (any, error), logger *slog.Logger) (any, error) {
 	go func() {
-		var res json.RawMessage
-		callErr := call.Await(ctx, &res)
-		if err := respondTo.Respond(r.ID, res, callErr); err != nil {
-			logger.Error("failed to respond", "error", err)
-			return
-		}
-	}()
-	return nil, jsonrpc2.ErrAsyncResponse
-}
-
-func CallRequestAsync(r *jsonrpc2.Request, respondTo Respondable, call func() (any, error), logger *slog.Logger) (any, error) {
-	wait := make(chan struct{}, 1)
-	defer close(wait)
-	go func() {
-		<- wait
 		res, callErr := call()
 		if err := respondTo.Respond(r.ID, res, callErr); err != nil {
 			logger.Error("failed to respond", "error", err)
 			return
 		}
 	}()
-		
 
 	return nil, jsonrpc2.ErrAsyncResponse
 }

@@ -32,5 +32,7 @@ func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, h.clientConn.Notify(ctx, r.Method, r.Params)
 	}
 
-	return ForwardRequestAsync(ctx, r, h.clientConn, h.conn, logger)
+	return HandleRequestAsAsync(r, h.conn, func() (any, error) {
+		return ForwardRequest(ctx, r, h.clientConn, logger)
+	}, logger)
 }
