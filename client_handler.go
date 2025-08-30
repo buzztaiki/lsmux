@@ -22,6 +22,7 @@ type ClientHandler struct {
 type serverConn struct {
 	name string
 	*jsonrpc2.Connection
+	initOptions map[string]any
 	supportedCaps map[string]struct{}
 	caps          *protocol.ServerCapabilities
 }
@@ -33,9 +34,9 @@ func NewClientHandler(nservers int) *ClientHandler {
 	}
 }
 
-func (h *ClientHandler) AddServerConn(name string, conn *jsonrpc2.Connection) {
+func (h *ClientHandler) AddServerConn(name string, conn *jsonrpc2.Connection, initOptions map[string]any) {
 	if len(h.serverConns) < h.nservers {
-		h.serverConns = append(h.serverConns, &serverConn{name, conn, nil, nil})
+		h.serverConns = append(h.serverConns, &serverConn{name, conn, initOptions, nil, nil})
 	}
 	if len(h.serverConns) == h.nservers {
 		close(h.ready)
@@ -120,13 +121,24 @@ func (*ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrp
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, logger *slog.Logger) (any, error) {
 	var merged map[string]any
 	for _, conn := range h.serverConns {
-		var rawRes json.RawMessage
-		if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &rawRes); err != nil {
+		var kvParams map[string]any
+		if err := json.Unmarshal(r.Params, &kvParams); err != nil {
 			return nil, err
 		}
 
-		var res protocol.InitializeResult
-		if err := json.Unmarshal(rawRes, &res); err != nil {
+		// override initializationOptions if configured
+		if len(conn.initOptions) != 0 {
+			logger.Info("override initializationOptions", "initOptions", conn.initOptions)
+			kvParams["initializationOptions"] = conn.initOptions
+		}
+
+		var rawRes json.RawMessage
+		if err := conn.Call(ctx, r.Method, kvParams).Await(ctx, &rawRes); err != nil {
+			return nil, err
+		}
+
+		var typedRes protocol.InitializeResult
+		if err := json.Unmarshal(rawRes, &typedRes); err != nil {
 			return nil, err
 		}
 
@@ -140,8 +152,10 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 			return nil, errors.New("no capabilities in initialize response")
 		}
 
+		// respect the preceding value
+		// NOTE: mergo.Merge did not union array values
 		mergo.Merge(&merged, kvCaps)
-		conn.caps = &res.Capabilities
+		conn.caps = &typedRes.Capabilities
 		conn.supportedCaps = CollectSupportedCapabilities(kvCaps)
 	}
 

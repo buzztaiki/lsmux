@@ -15,9 +15,10 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Name    string   `yaml:"name"`
-	Command string   `yaml:"command"`
-	Args    []string `yaml:"args"`
+	Name                  string         `yaml:"name"`
+	Command               string         `yaml:"command"`
+	Args                  []string       `yaml:"args"`
+	InitializationOptions map[string]any `yaml:"initializationOptions"`
 }
 
 type ServerConfigList []ServerConfig

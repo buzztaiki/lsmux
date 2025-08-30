@@ -47,7 +47,7 @@ func Start(ctx context.Context, cfg *Config) error {
 		}
 		defer serverConn.Close()
 
-		clientHandler.AddServerConn(serverCfg.Name, serverConn)
+		clientHandler.AddServerConn(serverCfg.Name, serverConn, serverCfg.InitializationOptions)
 	}
 	slog.Info("lspmux started")
 
