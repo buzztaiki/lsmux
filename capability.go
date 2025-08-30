@@ -1,8 +1,13 @@
 package lspmux
 
 func IsMethodSupported(method string, caps map[string]struct{}) bool {
-	_, ok := MethodToCapability[method]
-	return ok
+	methodCap, useCap := MethodToCapability[method]
+	if !useCap {
+		return true
+	}
+
+	_, supported := caps[methodCap]
+	return supported
 }
 
 // CollectSupportedCapabilities returns a map of dot notated capability to whether it's supported or not.
@@ -16,6 +21,7 @@ func collectSupportedCapabilities(prefix string, caps map[string]any, res map[st
 	for k, v := range caps {
 		switch v := v.(type) {
 		case map[string]any:
+			res[prefix+k] = struct{}{}
 			collectSupportedCapabilities(prefix+k+".", v, res)
 		case bool:
 			if v {
