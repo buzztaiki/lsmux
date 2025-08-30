@@ -33,6 +33,12 @@ func LoadConfig(fname string, serverNames []string) (*Config, error) {
 		return nil, err
 	}
 
+	for i := range cfg.Servers {
+		if cfg.Servers[i].Name == "" {
+			cfg.Servers[i].Name = cfg.Servers[i].Command
+		}
+	}
+
 	if len(serverNames) == 0 {
 		return &cfg, nil
 	}
