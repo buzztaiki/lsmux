@@ -12,8 +12,6 @@ import (
 )
 
 func Start(ctx context.Context, cfg *Config) error {
-	headerFramer := jsonrpc2.HeaderFramer()
-
 	clientPipe, err := NewIOPipeListener(ctx, os.Stdin, os.Stdout)
 	if err != nil {
 		return err
@@ -21,8 +19,7 @@ func Start(ctx context.Context, cfg *Config) error {
 	defer clientPipe.Close()
 
 	clientHandler := NewClientHandler(len(cfg.Servers))
-	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(),
-		jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: clientHandler})
+	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(), NewBinder(clientHandler))
 	if err != nil {
 		return err
 	}
@@ -40,8 +37,7 @@ func Start(ctx context.Context, cfg *Config) error {
 		}
 		defer serverPipe.Close()
 
-		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(),
-			jsonrpc2.ConnectionOptions{Framer: headerFramer, Handler: NewServerHandler(serverCfg.Name, clientConn)})
+		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), NewBinder(NewServerHandler(serverCfg.Name, clientConn)))
 		if err != nil {
 			return err
 		}
