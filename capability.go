@@ -1,12 +1,8 @@
 package lspmux
 
-func IsMethodSupported(method string, caps map[string]bool) bool {
-	methodCapPath, ok := MethodToCapability[method]
-	if !ok {
-		return false
-	}
-	enabled, ok := caps[methodCapPath]
-	return ok && enabled
+func IsMethodSupported(method string, caps map[string]struct{}) bool {
+	_, ok := MethodToCapability[method]
+	return ok
 }
 
 // CollectSupportedCapabilities returns a map of dot notated capability to whether it's supported or not.

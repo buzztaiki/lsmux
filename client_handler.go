@@ -76,7 +76,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 	default:
 		serverConns := []*serverConn{}
 		for _, conn := range h.serverConns {
-			if _, ok := conn.supportedCaps[r.Method]; ok {
+			if IsMethodSupported(r.Method, conn.supportedCaps) {
 				serverConns = append(serverConns, conn)
 			}
 		}
