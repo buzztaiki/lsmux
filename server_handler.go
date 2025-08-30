@@ -2,7 +2,6 @@ package lspmux
 
 import (
 	"context"
-	"encoding/json"
 	"log/slog"
 
 	"golang.org/x/exp/jsonrpc2"
@@ -10,8 +9,8 @@ import (
 
 type ServerHandler struct {
 	name       string
-	conn       *jsonrpc2.Connection
-	clientConn *jsonrpc2.Connection
+	conn       Respondable
+	clientConn Callable
 }
 
 func NewServerHandler(name string, clientConn *jsonrpc2.Connection) *ServerHandler {
@@ -33,14 +32,5 @@ func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, h.clientConn.Notify(ctx, r.Method, r.Params)
 	}
 
-	go func() {
-		var res json.RawMessage
-		call := h.clientConn.Call(ctx, r.Method, r.Params)
-		callErr := call.Await(ctx, &res)
-		if err := h.conn.Respond(r.ID, res, callErr); err != nil {
-			logger.Error("failed to respond", "error", err)
-		}
-	}()
-
-	return nil, jsonrpc2.ErrAsyncResponse
+	return ForwardRequestAsync(ctx, r, h.clientConn, h.conn, logger)
 }

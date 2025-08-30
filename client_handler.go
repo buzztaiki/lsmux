@@ -13,7 +13,7 @@ import (
 )
 
 type ClientHandler struct {
-	conn *jsonrpc2.Connection
+	conn Respondable
 	// TODO add server name to connection for better logging
 	serverConns []*serverConn
 	ready       chan (struct{})
@@ -22,7 +22,7 @@ type ClientHandler struct {
 
 type serverConn struct {
 	name string
-	*jsonrpc2.Connection
+	Callable
 	initOptions   map[string]any
 	supportedCaps map[string]struct{}
 	caps          *protocol.ServerCapabilities
@@ -41,7 +41,11 @@ func (h *ClientHandler) BindConnection(conn *jsonrpc2.Connection) {
 
 func (h *ClientHandler) AddServerConn(name string, conn *jsonrpc2.Connection, initOptions map[string]any) {
 	if len(h.serverConns) < h.nservers {
-		h.serverConns = append(h.serverConns, &serverConn{name, conn, initOptions, nil, nil})
+		h.serverConns = append(h.serverConns, &serverConn{
+			name:        name,
+			Callable:    conn,
+			initOptions: initOptions,
+		})
 	}
 	if len(h.serverConns) == h.nservers {
 		close(h.ready)
@@ -90,16 +94,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		// TODO Some methods should have their results merged
 		// TODO It would be nice if we could set how each method behaves
 		conn := serverConns[0]
-		logger := logger.With("server", conn.name)
-		go func() {
-			var res json.RawMessage
-			callErr := conn.Call(ctx, r.Method, r.Params).Await(ctx, &res)
-			if err := h.conn.Respond(r.ID, res, callErr); err != nil {
-				logger.Error("failed to respond", "error", err)
-				return
-			}
-		}()
-		return nil, jsonrpc2.ErrAsyncResponse
+		return ForwardRequestAsync(ctx, r, conn, h.conn, logger.With("server", conn.name))
 	}
 }
 
@@ -114,18 +109,7 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 			continue
 		}
 
-		logger := logger.With("command", params.Command, "server", conn.name)
-		logger.Info("executeCommand")
-		go func() {
-			var res json.RawMessage
-			call := conn.Call(ctx, r.Method, r.Params)
-			callErr := call.Await(ctx, &res)
-			if err := h.conn.Respond(r.ID, res, callErr); err != nil {
-				logger.Error("failed to respond", "error", err)
-				return
-			}
-		}()
-		return nil, jsonrpc2.ErrAsyncResponse
+		return ForwardRequestAsync(ctx, r, conn, h.conn, logger.With("command", params.Command, "server", conn.name))
 	}
 
 	return nil, ErrMethodNotFound
