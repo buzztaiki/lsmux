@@ -114,16 +114,18 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
 	}
+	logger = logger.With("command", params.Command)
 
-	for _, conn := range serverConns {
-		if slices.Index(conn.caps.ExecuteCommandProvider.Commands, params.Command) == -1 {
-			continue
-		}
-
-		return ForwardRequest(ctx, r, conn, logger.With("command", params.Command, "server", conn.name))
+	commandSupported := func(c *serverConn) bool {
+		return slices.Index(c.caps.ExecuteCommandProvider.Commands, params.Command) != -1
 	}
 
-	return nil, ErrMethodNotFound
+	conn := serverConns[0]
+	if i := slices.IndexFunc(h.serverConns, commandSupported); i != -1 {
+		conn = serverConns[i]
+	}
+
+	return ForwardRequest(ctx, r, conn, logger.With("server", conn.name))
 }
 
 func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
