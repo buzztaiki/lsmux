@@ -95,6 +95,8 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			return h.handleCompletionRequest(ctx, r, serverConns, logger)
 		case protocol.TextDocumentCodeActionMethod:
 			return h.handleCodeActionRequest(ctx, r, serverConns, logger)
+		case protocol.CodeActionResolveMethod:
+			return h.handleCodeActionResolveRequest(ctx, r, serverConns, logger)
 
 		default:
 			// Currently, request is sent to the first server only
@@ -171,6 +173,9 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 	return &res, nil
 }
 
+const codeActionDataServerKey = "lspmux.server"
+const codeActionDataOriginalDataKey = "lspmux.originalData"
+
 func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
 	g := new(errgroup.Group)
 	results := SliceFor(protocol.CodeActionResponse{}.Result, len(serverConns))
@@ -192,11 +197,54 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 	logger.Info("all codeAction results received")
 
 	res := OrZeroValue(protocol.CodeActionResponse{}.Result)
-	for _, r := range results {
-		res = append(res, OrZeroValue(r)...)
+	for i, r := range results {
+		for _, action := range OrZeroValue(r) {
+			if v, ok := action.Value.(protocol.CodeAction); ok {
+				// add server name to code action data for future resolve
+				v.Data = map[string]any{codeActionDataServerKey: serverConns[i].name, codeActionDataOriginalDataKey: v.Data}
+				action.Value = v
+			}
+			res = append(res, action)
+		}
 	}
 
 	return &res, nil
+}
+
+func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, _ *slog.Logger) (any, error) {
+	params := protocol.CodeActionResolveRequest{}.Params
+	if err := json.Unmarshal(r.Params, &params); err != nil {
+		return nil, err
+	}
+
+	extractData := func() (string, any, error) {
+		data, ok := params.Data.(map[string]any)
+		if !ok {
+			return "", nil, fmt.Errorf("invalid code action data")
+		}
+		serverName, ok := data[codeActionDataServerKey].(string)
+		if !ok {
+			return "", nil, fmt.Errorf("%s not found in code action data", codeActionDataServerKey)
+		}
+		return serverName, data[codeActionDataOriginalDataKey], nil
+	}
+
+	serverName, originalData, err := extractData()
+	if err != nil {
+		return nil, err
+	}
+	params.Data = originalData
+
+	i := slices.IndexFunc(serverConns, func(c *serverConn) bool { return c.name == serverName })
+	if i == -1 {
+		return nil, ErrMethodNotFound
+	}
+
+	var res json.RawMessage
+	if err := serverConns[i].Call(ctx, r.Method, params).Await(ctx, &res); err != nil {
+		return nil, err
+	}
+	return res, nil
 }
 
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, logger *slog.Logger) (any, error) {
