@@ -137,9 +137,6 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 			logger.Info("completion result received", "server", conn.name)
 			return nil
 		})
-		if err := g.Wait(); err != nil {
-			return nil, err
-		}
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
@@ -187,9 +184,6 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 			logger.Info("codeAction result received", "server", conn.name)
 			return nil
 		})
-		if err := g.Wait(); err != nil {
-			return nil, err
-		}
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
