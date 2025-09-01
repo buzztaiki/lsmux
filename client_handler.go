@@ -14,20 +14,33 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type ClientHandler struct {
-	conn Respondable
-	// TODO add server name to connection for better logging
-	serverConns []*serverConn
-	ready       chan (struct{})
-	nservers    int
-}
-
 type serverConn struct {
 	name string
 	Callable
 	initOptions   map[string]any
 	supportedCaps map[string]struct{}
 	caps          *protocol.ServerCapabilities
+}
+
+func (c *serverConn) call(ctx context.Context, method string, params any) (any, error) {
+	var res json.RawMessage
+	if err := c.callWithRes(ctx, method, params, &res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (c *serverConn) callWithRes(ctx context.Context, method string, params any, res any) error {
+	slog.InfoContext(ctx, "send request to "+c.name)
+	return c.Call(ctx, method, params).Await(ctx, &res)
+}
+
+type ClientHandler struct {
+	conn Respondable
+	// TODO add server name to connection for better logging
+	serverConns []*serverConn
+	ready       chan (struct{})
+	nservers    int
 }
 
 func NewClientHandler(nservers int) *ClientHandler {
@@ -98,7 +111,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			// Currently, request is sent to the first server only
 			// TODO Some methods should have their results merged
 			// TODO It would be nice if we could set how each method behaves
-			return ForwardRequest(ctx, r, serverConns[0])
+			return serverConns[0].call(ctx, r.Method, r.Params)
 		}
 	})
 
@@ -119,7 +132,7 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 		conn = serverConns[i]
 	}
 
-	return ForwardRequest(ctx, r, conn)
+	return conn.call(ctx, r.Method, r.Params)
 }
 
 func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
@@ -127,7 +140,7 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 	results := SliceFor(protocol.CompletionResponse{}.Result, len(serverConns))
 	for i, conn := range serverConns {
 		g.Go(func() error {
-			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
+			if err := conn.callWithRes(ctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
@@ -169,7 +182,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 	results := SliceFor(protocol.CodeActionResponse{}.Result, len(serverConns))
 	for i, conn := range serverConns {
 		g.Go(func() error {
-			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
+			if err := conn.callWithRes(ctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
@@ -223,11 +236,7 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 		return nil, ErrMethodNotFound
 	}
 
-	var res json.RawMessage
-	if err := serverConns[i].Call(ctx, r.Method, params).Await(ctx, &res); err != nil {
-		return nil, err
-	}
-	return res, nil
+	return serverConns[i].call(ctx, r.Method, params)
 }
 
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request) (any, error) {
@@ -245,7 +254,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 		}
 
 		var rawRes json.RawMessage
-		if err := conn.Call(ctx, r.Method, kvParams).Await(ctx, &rawRes); err != nil {
+		if err := conn.callWithRes(ctx, r.Method, kvParams, &rawRes); err != nil {
 			return nil, err
 		}
 
