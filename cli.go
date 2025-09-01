@@ -3,7 +3,13 @@ package lspmux
 import (
 	"context"
 	"flag"
+	"log/slog"
+	"os"
 	"strings"
+	"time"
+
+	"github.com/lmittmann/tint"
+	slogctx "github.com/veqryn/slog-context"
 )
 
 func CLI() error {
@@ -13,6 +19,11 @@ func CLI() error {
 	flag.StringVar(&configPath, "config", configPath, "path to config file")
 	flag.StringVar(&serverNamesValue, "servers", serverNamesValue, "comma-separated server names to start (or empty to start all servers)")
 	flag.Parse()
+
+	logHandler := slogctx.NewHandler(
+		tint.NewHandler(os.Stderr, &tint.Options{NoColor: true, TimeFormat: time.DateTime + ".000"}),
+		nil)
+	slog.SetDefault(slog.New(logHandler))
 
 	var serverNames []string
 	for name := range strings.SplitSeq(serverNamesValue, ",") {
