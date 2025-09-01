@@ -2,9 +2,12 @@ package lspmux
 
 import (
 	"context"
+	"encoding/base32"
 	"log/slog"
+	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	slogctx "github.com/veqryn/slog-context"
 	"golang.org/x/exp/jsonrpc2"
 )
@@ -38,15 +41,18 @@ func (mb *MiddlewareBinder) Bind(ctx context.Context, conn *jsonrpc2.Connection)
 func ContextLogMiddleware(name string) Middleware {
 	return func(next jsonrpc2.Handler) jsonrpc2.Handler {
 		f := func(ctx context.Context, r *jsonrpc2.Request) (any, error) {
+			traceUUID := uuid.New()
+			traceID := strings.ToLower(base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(traceUUID[:]))
 			attrs := []any{
 				slog.String("name", name),
-				slog.String("handleMethod", r.Method),
+				slog.String("traceID", traceID),
+				slog.String("reqMethod", r.Method),
 			}
 
 			if r.IsCall() {
-				attrs = append(attrs, slog.String("handleType", "request"), slog.Any("handleID", r.ID.Raw()))
+				attrs = append(attrs, slog.String("reqType", "request"), slog.Any("reqID", r.ID.Raw()))
 			} else {
-				attrs = append(attrs, slog.String("handleType", "notification"))
+				attrs = append(attrs, slog.String("reqType", "notification"))
 			}
 
 			ctx = slogctx.Prepend(ctx, attrs...)
