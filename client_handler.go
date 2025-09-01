@@ -32,11 +32,6 @@ func (h *ClientHandler) BindConnection(conn *jsonrpc2.Connection) {
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	h.serverRegistry.WaitReady()
 
-	method := protocol.MethodKind(r.Method)
-	if method == protocol.InitializeMethod {
-		return h.handleInitializeRequest(ctx, r)
-	}
-
 	servers := []*ServerConnection{}
 	for _, server := range h.serverRegistry.Servers() {
 		if IsMethodSupported(r.Method, server.SupportedCapabilities) {
@@ -57,7 +52,9 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, nil
 	}
 
-	switch method {
+	switch protocol.MethodKind(r.Method) {
+	case protocol.InitializeMethod:
+		return h.handleInitializeRequest(ctx, r, servers)
 	case protocol.WorkspaceExecuteCommandMethod:
 		return h.handleExecuteCommandRequest(ctx, r, servers)
 	case protocol.TextDocumentCompletionMethod:
@@ -71,6 +68,55 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		// Currently, request is sent to the first server only
 		return servers[0].CallWithRawResult(ctx, r.Method, r.Params)
 	}
+}
+
+func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+	var merged map[string]any
+	for _, server := range servers {
+		var kvParams map[string]any
+		if err := json.Unmarshal(r.Params, &kvParams); err != nil {
+			return nil, err
+		}
+
+		// override initializationOptions if configured
+		if len(server.InitOptions) != 0 {
+			slog.InfoContext(ctx, "override initializationOptions", "server", server.Name, "initOptions", server.InitOptions)
+			kvParams["initializationOptions"] = server.InitOptions
+		}
+
+		var rawRes json.RawMessage
+		if err := server.Call(ctx, r.Method, kvParams, &rawRes); err != nil {
+			return nil, err
+		}
+
+		var typedRes protocol.InitializeResult
+		if err := json.Unmarshal(rawRes, &typedRes); err != nil {
+			return nil, err
+		}
+
+		var kvRes map[string]any
+		if err := json.Unmarshal(rawRes, &kvRes); err != nil {
+			return nil, err
+		}
+
+		kvCaps, ok := kvRes["capabilities"].(map[string]any)
+		if !ok {
+			return nil, errors.New("no capabilities in initialize response")
+		}
+
+		// respect the preceding value
+		// NOTE: mergo.Merge did not union array values
+		mergo.Merge(&merged, kvCaps)
+		server.Capabilities = &typedRes.Capabilities
+		server.SupportedCapabilities = CollectSupportedCapabilities(kvCaps)
+	}
+
+	return map[string]any{
+		"serverInfo": map[string]any{
+			"name": "lspmux", // TODO configurable
+		},
+		"capabilities": merged,
+	}, nil
 }
 
 func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
@@ -193,53 +239,4 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 	}
 
 	return servers[i].CallWithRawResult(ctx, r.Method, params)
-}
-
-func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	var merged map[string]any
-	for _, server := range h.serverRegistry.Servers() {
-		var kvParams map[string]any
-		if err := json.Unmarshal(r.Params, &kvParams); err != nil {
-			return nil, err
-		}
-
-		// override initializationOptions if configured
-		if len(server.InitOptions) != 0 {
-			slog.InfoContext(ctx, "override initializationOptions", "server", server.Name, "initOptions", server.InitOptions)
-			kvParams["initializationOptions"] = server.InitOptions
-		}
-
-		var rawRes json.RawMessage
-		if err := server.Call(ctx, r.Method, kvParams, &rawRes); err != nil {
-			return nil, err
-		}
-
-		var typedRes protocol.InitializeResult
-		if err := json.Unmarshal(rawRes, &typedRes); err != nil {
-			return nil, err
-		}
-
-		var kvRes map[string]any
-		if err := json.Unmarshal(rawRes, &kvRes); err != nil {
-			return nil, err
-		}
-
-		kvCaps, ok := kvRes["capabilities"].(map[string]any)
-		if !ok {
-			return nil, errors.New("no capabilities in initialize response")
-		}
-
-		// respect the preceding value
-		// NOTE: mergo.Merge did not union array values
-		mergo.Merge(&merged, kvCaps)
-		server.Capabilities = &typedRes.Capabilities
-		server.SupportedCapabilities = CollectSupportedCapabilities(kvCaps)
-	}
-
-	return map[string]any{
-		"serverInfo": map[string]any{
-			"name": "lspmux", // TODO configurable
-		},
-		"capabilities": merged,
-	}, nil
 }
