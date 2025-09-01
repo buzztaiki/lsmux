@@ -21,7 +21,6 @@ type Respondable interface {
 }
 
 func ForwardRequest(ctx context.Context, r *jsonrpc2.Request, callTo Callable) (any, error) {
-	slog.InfoContext(ctx, "forwarding request")
 	var res json.RawMessage
 	if err := callTo.Call(ctx, r.Method, r.Params).Await(ctx, &res); err != nil {
 		return nil, err

@@ -10,7 +10,6 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/myleshyson/lsprotocol-go/protocol"
-	slogctx "github.com/veqryn/slog-context"
 	"golang.org/x/exp/jsonrpc2"
 	"golang.org/x/sync/errgroup"
 )
@@ -101,9 +100,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			// Currently, request is sent to the first server only
 			// TODO Some methods should have their results merged
 			// TODO It would be nice if we could set how each method behaves
-			conn := serverConns[0]
-			ctx = slogctx.Append(ctx, "server", conn.name)
-			return ForwardRequest(ctx, r, conn)
+			return ForwardRequest(ctx, r, serverConns[0])
 		}
 	})
 
@@ -114,7 +111,6 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
 	}
-	ctx = slogctx.Append(ctx, "command", params.Command)
 
 	commandSupported := func(c *serverConn) bool {
 		return slices.Index(c.caps.ExecuteCommandProvider.Commands, params.Command) != -1
@@ -125,7 +121,6 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 		conn = serverConns[i]
 	}
 
-	ctx = slogctx.Append(ctx, "server", conn.name)
 	return ForwardRequest(ctx, r, conn)
 }
 
