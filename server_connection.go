@@ -17,7 +17,7 @@ type ServerConnection struct {
 	Capabilities          *protocol.ServerCapabilities
 }
 
-func (c *ServerConnection) DefaultCall(ctx context.Context, method string, params any) (any, error) {
+func (c *ServerConnection) CallWithRawResult(ctx context.Context, method string, params any) (json.RawMessage, error) {
 	var res json.RawMessage
 	if err := c.Call(ctx, method, params, &res); err != nil {
 		return nil, err

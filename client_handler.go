@@ -70,7 +70,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 
 		default:
 			// Currently, request is sent to the first server only
-			return servers[0].DefaultCall(ctx, r.Method, r.Params)
+			return servers[0].CallWithRawResult(ctx, r.Method, r.Params)
 		}
 	})
 
@@ -91,7 +91,7 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 		server = servers[i]
 	}
 
-	return server.DefaultCall(ctx, r.Method, r.Params)
+	return server.CallWithRawResult(ctx, r.Method, r.Params)
 }
 
 func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
@@ -195,7 +195,7 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 		return nil, ErrMethodNotFound
 	}
 
-	return servers[i].DefaultCall(ctx, r.Method, params)
+	return servers[i].CallWithRawResult(ctx, r.Method, params)
 }
 
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request) (any, error) {
