@@ -56,8 +56,6 @@ func (h *ClientHandler) AddServerConn(ctx context.Context, name string, conn *js
 }
 
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	slog.InfoContext(ctx, "handle")
-
 	<-h.ready
 
 	method := protocol.MethodKind(r.Method)
@@ -85,7 +83,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, nil
 	}
 
-	return HandleRequestAsAsync(ctx, r, h.conn, func() (any, error) {
+	return HandleRequestAsAsync(ctx, r, h.conn, func(ctx context.Context) (any, error) {
 		switch method {
 		case protocol.WorkspaceExecuteCommandMethod:
 			return h.handleExecuteCommandRequest(ctx, r, serverConns)
@@ -132,17 +130,14 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
 				return err
 			}
-			slog.InfoContext(ctx, "completion result received", "server", conn.name)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	slog.InfoContext(ctx, "all completion results received")
 
 	var res protocol.CompletionList
-
 	for _, r := range results {
 		if v, ok := r.Value.(protocol.CompletionList); ok {
 			mergo.Merge(&res, v)
@@ -150,13 +145,11 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 	}
 
 	res.Items = []protocol.CompletionItem{}
-	for i, r := range results {
+	for _, r := range results {
 		switch v := r.Value.(type) {
 		case []protocol.CompletionItem:
-			slog.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v))
 			res.Items = append(res.Items, v...)
 		case protocol.CompletionList:
-			slog.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v.Items))
 			res.Items = append(res.Items, v.Items...)
 		case nil:
 		// do nothing
@@ -179,14 +172,12 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
 				return err
 			}
-			slog.InfoContext(ctx, "codeAction result received", "server", conn.name)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	slog.InfoContext(ctx, "all codeAction results received")
 
 	res := OrZeroValue(protocol.CodeActionResponse{}.Result)
 	for i, r := range results {
@@ -249,7 +240,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 
 		// override initializationOptions if configured
 		if len(conn.initOptions) != 0 {
-			slog.InfoContext(ctx, "override initializationOptions", "initOptions", conn.initOptions)
+			slog.InfoContext(ctx, "override initializationOptions", "server", conn.name, "initOptions", conn.initOptions)
 			kvParams["initializationOptions"] = conn.initOptions
 		}
 

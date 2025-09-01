@@ -3,7 +3,6 @@ package lspmux
 import (
 	"context"
 	"encoding/json"
-	"log/slog"
 
 	"github.com/myleshyson/lsprotocol-go/protocol"
 	"golang.org/x/exp/jsonrpc2"
@@ -29,8 +28,6 @@ func (h *ServerHandler) BindConnection(conn *jsonrpc2.Connection) {
 }
 
 func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	slog.InfoContext(ctx, "handle")
-
 	method := protocol.MethodKind(r.Method)
 
 	if !r.IsCall() {
@@ -42,7 +39,7 @@ func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		}
 	}
 
-	return HandleRequestAsAsync(ctx, r, h.conn, func() (any, error) {
+	return HandleRequestAsAsync(ctx, r, h.conn, func(ctx context.Context) (any, error) {
 		return ForwardRequest(ctx, r, h.clientConn)
 	})
 }

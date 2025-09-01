@@ -28,9 +28,12 @@ func ForwardRequest(ctx context.Context, r *jsonrpc2.Request, callTo Callable) (
 	return res, nil
 }
 
-func HandleRequestAsAsync(ctx context.Context, r *jsonrpc2.Request, respondTo Respondable, call func() (any, error)) (any, error) {
+func HandleRequestAsAsync(
+	ctx context.Context, r *jsonrpc2.Request, respondTo Respondable,
+	call func(ctx context.Context) (any, error),
+) (any, error) {
 	go func() {
-		res, callErr := call()
+		res, callErr := WithAccessLog(ctx, call)
 		if err := respondTo.Respond(r.ID, res, callErr); err != nil {
 			slog.ErrorContext(ctx, "failed to respond", "error", err)
 			return
