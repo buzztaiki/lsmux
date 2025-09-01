@@ -57,23 +57,20 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, nil
 	}
 
-	return HandleRequestAsAsync(ctx, r, h.conn, func(ctx context.Context) (any, error) {
-		switch method {
-		case protocol.WorkspaceExecuteCommandMethod:
-			return h.handleExecuteCommandRequest(ctx, r, servers)
-		case protocol.TextDocumentCompletionMethod:
-			return h.handleCompletionRequest(ctx, r, servers)
-		case protocol.TextDocumentCodeActionMethod:
-			return h.handleCodeActionRequest(ctx, r, servers)
-		case protocol.CodeActionResolveMethod:
-			return h.handleCodeActionResolveRequest(ctx, r, servers)
+	switch method {
+	case protocol.WorkspaceExecuteCommandMethod:
+		return h.handleExecuteCommandRequest(ctx, r, servers)
+	case protocol.TextDocumentCompletionMethod:
+		return h.handleCompletionRequest(ctx, r, servers)
+	case protocol.TextDocumentCodeActionMethod:
+		return h.handleCodeActionRequest(ctx, r, servers)
+	case protocol.CodeActionResolveMethod:
+		return h.handleCodeActionResolveRequest(ctx, r, servers)
 
-		default:
-			// Currently, request is sent to the first server only
-			return servers[0].CallWithRawResult(ctx, r.Method, r.Params)
-		}
-	})
-
+	default:
+		// Currently, request is sent to the first server only
+		return servers[0].CallWithRawResult(ctx, r.Method, r.Params)
+	}
 }
 
 func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
