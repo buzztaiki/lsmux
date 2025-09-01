@@ -37,20 +37,20 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return h.handleInitializeRequest(ctx, r)
 	}
 
-	serverConns := []*ServerConnection{}
-	for _, conn := range h.serverRegistry.Servers() {
-		if IsMethodSupported(r.Method, conn.SupportedCapabilities) {
-			serverConns = append(serverConns, conn)
+	servers := []*ServerConnection{}
+	for _, server := range h.serverRegistry.Servers() {
+		if IsMethodSupported(r.Method, server.SupportedCapabilities) {
+			servers = append(servers, server)
 		}
 	}
 
-	if len(serverConns) == 0 {
+	if len(servers) == 0 {
 		return nil, ErrMethodNotFound
 	}
 
 	if !r.IsCall() {
-		for _, conn := range serverConns {
-			if err := conn.Notify(ctx, r.Method, r.Params); err != nil {
+		for _, server := range servers {
+			if err := server.Notify(ctx, r.Method, r.Params); err != nil {
 				return nil, err
 			}
 		}
@@ -60,48 +60,46 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 	return HandleRequestAsAsync(ctx, r, h.conn, func(ctx context.Context) (any, error) {
 		switch method {
 		case protocol.WorkspaceExecuteCommandMethod:
-			return h.handleExecuteCommandRequest(ctx, r, serverConns)
+			return h.handleExecuteCommandRequest(ctx, r, servers)
 		case protocol.TextDocumentCompletionMethod:
-			return h.handleCompletionRequest(ctx, r, serverConns)
+			return h.handleCompletionRequest(ctx, r, servers)
 		case protocol.TextDocumentCodeActionMethod:
-			return h.handleCodeActionRequest(ctx, r, serverConns)
+			return h.handleCodeActionRequest(ctx, r, servers)
 		case protocol.CodeActionResolveMethod:
-			return h.handleCodeActionResolveRequest(ctx, r, serverConns)
+			return h.handleCodeActionResolveRequest(ctx, r, servers)
 
 		default:
 			// Currently, request is sent to the first server only
-			// TODO Some methods should have their results merged
-			// TODO It would be nice if we could set how each method behaves
-			return serverConns[0].DefaultCall(ctx, r.Method, r.Params)
+			return servers[0].DefaultCall(ctx, r.Method, r.Params)
 		}
 	})
 
 }
 
-func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
 	var params protocol.ExecuteCommandParams
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
 	}
 
-	commandSupported := func(c *ServerConnection) bool {
-		return slices.Index(c.Capabilities.ExecuteCommandProvider.Commands, params.Command) != -1
+	commandSupported := func(s *ServerConnection) bool {
+		return slices.Index(s.Capabilities.ExecuteCommandProvider.Commands, params.Command) != -1
 	}
 
-	conn := serverConns[0]
-	if i := slices.IndexFunc(serverConns, commandSupported); i != -1 {
-		conn = serverConns[i]
+	server := servers[0]
+	if i := slices.IndexFunc(servers, commandSupported); i != -1 {
+		server = servers[i]
 	}
 
-	return conn.DefaultCall(ctx, r.Method, r.Params)
+	return server.DefaultCall(ctx, r.Method, r.Params)
 }
 
-func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
 	g := new(errgroup.Group)
-	results := SliceFor(protocol.CompletionResponse{}.Result, len(serverConns))
-	for i, conn := range serverConns {
+	results := SliceFor(protocol.CompletionResponse{}.Result, len(servers))
+	for i, server := range servers {
 		g.Go(func() error {
-			if err := conn.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
+			if err := server.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
@@ -138,12 +136,12 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 const codeActionDataServerKey = "lspmux.server"
 const codeActionDataOriginalDataKey = "lspmux.originalData"
 
-func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
 	g := new(errgroup.Group)
-	results := SliceFor(protocol.CodeActionResponse{}.Result, len(serverConns))
-	for i, conn := range serverConns {
+	results := SliceFor(protocol.CodeActionResponse{}.Result, len(servers))
+	for i, server := range servers {
 		g.Go(func() error {
-			if err := conn.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
+			if err := server.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
@@ -158,7 +156,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 		for _, action := range OrZeroValue(r) {
 			if v, ok := action.Value.(protocol.CodeAction); ok {
 				// add server name to code action data for future resolve
-				v.Data = map[string]any{codeActionDataServerKey: serverConns[i].Name, codeActionDataOriginalDataKey: v.Data}
+				v.Data = map[string]any{codeActionDataServerKey: servers[i].Name, codeActionDataOriginalDataKey: v.Data}
 				action.Value = v
 			}
 			res = append(res, action)
@@ -168,7 +166,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 	return &res, nil
 }
 
-func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
 	params := protocol.CodeActionResolveRequest{}.Params
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
@@ -192,30 +190,30 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 	}
 	params.Data = originalData
 
-	i := slices.IndexFunc(serverConns, func(c *ServerConnection) bool { return c.Name == serverName })
+	i := slices.IndexFunc(servers, func(s *ServerConnection) bool { return s.Name == serverName })
 	if i == -1 {
 		return nil, ErrMethodNotFound
 	}
 
-	return serverConns[i].DefaultCall(ctx, r.Method, params)
+	return servers[i].DefaultCall(ctx, r.Method, params)
 }
 
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	var merged map[string]any
-	for _, conn := range h.serverRegistry.Servers() {
+	for _, server := range h.serverRegistry.Servers() {
 		var kvParams map[string]any
 		if err := json.Unmarshal(r.Params, &kvParams); err != nil {
 			return nil, err
 		}
 
 		// override initializationOptions if configured
-		if len(conn.InitOptions) != 0 {
-			slog.InfoContext(ctx, "override initializationOptions", "server", conn.Name, "initOptions", conn.InitOptions)
-			kvParams["initializationOptions"] = conn.InitOptions
+		if len(server.InitOptions) != 0 {
+			slog.InfoContext(ctx, "override initializationOptions", "server", server.Name, "initOptions", server.InitOptions)
+			kvParams["initializationOptions"] = server.InitOptions
 		}
 
 		var rawRes json.RawMessage
-		if err := conn.Call(ctx, r.Method, kvParams, &rawRes); err != nil {
+		if err := server.Call(ctx, r.Method, kvParams, &rawRes); err != nil {
 			return nil, err
 		}
 
@@ -237,8 +235,8 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 		// respect the preceding value
 		// NOTE: mergo.Merge did not union array values
 		mergo.Merge(&merged, kvCaps)
-		conn.Capabilities = &typedRes.Capabilities
-		conn.SupportedCapabilities = CollectSupportedCapabilities(kvCaps)
+		server.Capabilities = &typedRes.Capabilities
+		server.SupportedCapabilities = CollectSupportedCapabilities(kvCaps)
 	}
 
 	return map[string]any{
