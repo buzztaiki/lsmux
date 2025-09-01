@@ -21,7 +21,7 @@ type Respondable interface {
 }
 
 func ForwardRequest(ctx context.Context, r *jsonrpc2.Request, callTo Callable, logger *slog.Logger) (any, error) {
-	logger.Info("forwarding request")
+	logger.InfoContext(ctx, "forwarding request")
 	var res json.RawMessage
 	if err := callTo.Call(ctx, r.Method, r.Params).Await(ctx, &res); err != nil {
 		return nil, err
@@ -29,11 +29,11 @@ func ForwardRequest(ctx context.Context, r *jsonrpc2.Request, callTo Callable, l
 	return res, nil
 }
 
-func HandleRequestAsAsync(r *jsonrpc2.Request, respondTo Respondable, call func() (any, error), logger *slog.Logger) (any, error) {
+func HandleRequestAsAsync(ctx context.Context, r *jsonrpc2.Request, respondTo Respondable, call func() (any, error), logger *slog.Logger) (any, error) {
 	go func() {
 		res, callErr := call()
 		if err := respondTo.Respond(r.ID, res, callErr); err != nil {
-			logger.Error("failed to respond", "error", err)
+			logger.ErrorContext(ctx, "failed to respond", "error", err)
 			return
 		}
 	}()

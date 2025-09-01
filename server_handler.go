@@ -29,8 +29,8 @@ func (h *ServerHandler) BindConnection(conn *jsonrpc2.Connection) {
 }
 
 func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	logger := slog.With("component", "ServerHandler", "method", r.Method, "id", r.ID.Raw(), "type", RequestType(r), "name", h.name)
-	logger.Info("handle")
+	logger := slog.Default()
+	logger.InfoContext(ctx, "handle")
 
 	method := protocol.MethodKind(r.Method)
 
@@ -43,7 +43,7 @@ func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		}
 	}
 
-	return HandleRequestAsAsync(r, h.conn, func() (any, error) {
+	return HandleRequestAsAsync(ctx, r, h.conn, func() (any, error) {
 		return ForwardRequest(ctx, r, h.clientConn, logger)
 	}, logger)
 }
@@ -54,13 +54,13 @@ func (h *ServerHandler) handlePublishDiagnosticsNotification(ctx context.Context
 		return err
 	}
 
-	logger.Info("server diags", "ndiags", len(params.Diagnostics))
+	logger.InfoContext(ctx, "server diags", "ndiags", len(params.Diagnostics))
 
 	h.diagRegistry.UpdateDiagnostics(params.Uri, h.name, params.Diagnostics)
 	params.Diagnostics = h.diagRegistry.GetDiagnostics(params.Uri)
 
-	logger.Info("file diags", "ndiags", len(h.diagRegistry.GetDiagnostics(params.Uri)))
-	logger.Info("return diags", "ndiags", len(params.Diagnostics), "data", params.Diagnostics)
+	logger.InfoContext(ctx, "file diags", "ndiags", len(h.diagRegistry.GetDiagnostics(params.Uri)))
+	logger.InfoContext(ctx, "return diags", "ndiags", len(params.Diagnostics), "data", params.Diagnostics)
 
 	return h.clientConn.Notify(ctx, r.Method, params)
 }

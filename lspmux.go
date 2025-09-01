@@ -19,7 +19,7 @@ func Start(ctx context.Context, cfg *Config) error {
 	defer clientPipe.Close()
 
 	clientHandler := NewClientHandler(len(cfg.Servers))
-	clientBinder := NewMiddlewareBinder(NewBinder(clientHandler), ContextLogMiddleware("client"))
+	clientBinder := NewMiddlewareBinder(NewBinder(clientHandler), ContextLogMiddleware("ClientHandler"))
 	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(), clientBinder)
 	if err != nil {
 		return err
@@ -32,7 +32,7 @@ func Start(ctx context.Context, cfg *Config) error {
 
 	diagRegistry := NewDiagnosticRegistry()
 	for _, serverCfg := range cfg.Servers {
-		slog.Info(fmt.Sprintf("starting lsp server: %s: %s", serverCfg.Name, strings.Join(append([]string{serverCfg.Command}, serverCfg.Args...), " ")))
+		slog.InfoContext(ctx, fmt.Sprintf("starting lsp server: %s: %s", serverCfg.Name, strings.Join(append([]string{serverCfg.Command}, serverCfg.Args...), " ")))
 		serverPipe, err := NewCmdPipeListener(ctx, exec.CommandContext(ctx, serverCfg.Command, serverCfg.Args...))
 		if err != nil {
 			return err
@@ -40,16 +40,16 @@ func Start(ctx context.Context, cfg *Config) error {
 		defer serverPipe.Close()
 
 		serverHandler := NewServerHandler(serverCfg.Name, clientConn, diagRegistry)
-		serverBinder := NewMiddlewareBinder(NewBinder(serverHandler), ContextLogMiddleware(serverCfg.Name))
+		serverBinder := NewMiddlewareBinder(NewBinder(serverHandler), ContextLogMiddleware("ServerHandler("+serverCfg.Name+")"))
 		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), serverBinder)
 		if err != nil {
 			return err
 		}
 		defer serverConn.Close()
 
-		clientHandler.AddServerConn(serverCfg.Name, serverConn, serverCfg.InitializationOptions)
+		clientHandler.AddServerConn(ctx, serverCfg.Name, serverConn, serverCfg.InitializationOptions)
 	}
-	slog.Info("lspmux started")
+	slog.InfoContext(ctx, "lspmux started")
 
 	// TODO wait server connections
 	clientConn.Wait()

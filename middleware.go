@@ -36,7 +36,12 @@ func (mb *MiddlewareBinder) Bind(ctx context.Context, conn *jsonrpc2.Connection)
 func ContextLogMiddleware(name string) Middleware {
 	return func(next jsonrpc2.Handler) jsonrpc2.Handler {
 		f := func(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-			ctx = slogctx.Append(ctx, "name", name, "method", r.Method, "id", r.ID.Raw(), "type", RequestType(r))
+			ctx = slogctx.Append(ctx, "name", name, "method", r.Method)
+			if r.IsCall() {
+				ctx = slogctx.Append(ctx, "type", "request", "id", r.ID.Raw())
+			} else {
+				ctx = slogctx.Append(ctx, "type", "notification")
+			}
 			return next.Handle(ctx, r)
 		}
 		return jsonrpc2.HandlerFunc(f)

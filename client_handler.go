@@ -41,7 +41,7 @@ func (h *ClientHandler) BindConnection(conn *jsonrpc2.Connection) {
 	h.conn = conn
 }
 
-func (h *ClientHandler) AddServerConn(name string, conn *jsonrpc2.Connection, initOptions map[string]any) {
+func (h *ClientHandler) AddServerConn(ctx context.Context, name string, conn *jsonrpc2.Connection, initOptions map[string]any) {
 	if len(h.serverConns) < h.nservers {
 		h.serverConns = append(h.serverConns, &serverConn{
 			name:        name,
@@ -51,14 +51,14 @@ func (h *ClientHandler) AddServerConn(name string, conn *jsonrpc2.Connection, in
 	}
 	if len(h.serverConns) == h.nservers {
 		close(h.ready)
-		slog.Info("all server connections established")
+		slog.InfoContext(ctx, "all server connections established")
 	}
 }
 
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	// TODO logger and logging middlere
-	logger := slog.With("component", "ClientHandler", "method", r.Method, "id", r.ID.Raw(), "type", RequestType(r))
-	logger.Info("handle")
+	logger := slog.Default()
+	logger.InfoContext(ctx, "handle")
 
 	<-h.ready
 
@@ -87,7 +87,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, nil
 	}
 
-	return HandleRequestAsAsync(r, h.conn, func() (any, error) {
+	return HandleRequestAsAsync(ctx, r, h.conn, func() (any, error) {
 		switch method {
 		case protocol.WorkspaceExecuteCommandMethod:
 			return h.handleExecuteCommandRequest(ctx, r, serverConns, logger)
@@ -136,14 +136,14 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
 				return err
 			}
-			logger.Info("completion result received", "server", conn.name)
+			logger.InfoContext(ctx, "completion result received", "server", conn.name)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	logger.Info("all completion results received")
+	logger.InfoContext(ctx, "all completion results received")
 
 	var res protocol.CompletionList
 
@@ -157,10 +157,10 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 	for i, r := range results {
 		switch v := r.Value.(type) {
 		case []protocol.CompletionItem:
-			logger.Info("completion items", "server", serverConns[i].name, "nitems", len(v))
+			logger.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v))
 			res.Items = append(res.Items, v...)
 		case protocol.CompletionList:
-			logger.Info("completion items", "server", serverConns[i].name, "nitems", len(v.Items))
+			logger.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v.Items))
 			res.Items = append(res.Items, v.Items...)
 		case nil:
 		// do nothing
@@ -183,14 +183,14 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
 				return err
 			}
-			logger.Info("codeAction result received", "server", conn.name)
+			logger.InfoContext(ctx, "codeAction result received", "server", conn.name)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	logger.Info("all codeAction results received")
+	logger.InfoContext(ctx, "all codeAction results received")
 
 	res := OrZeroValue(protocol.CodeActionResponse{}.Result)
 	for i, r := range results {
@@ -253,7 +253,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 
 		// override initializationOptions if configured
 		if len(conn.initOptions) != 0 {
-			logger.Info("override initializationOptions", "initOptions", conn.initOptions)
+			logger.InfoContext(ctx, "override initializationOptions", "initOptions", conn.initOptions)
 			kvParams["initializationOptions"] = conn.initOptions
 		}
 
