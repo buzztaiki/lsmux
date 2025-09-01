@@ -92,11 +92,11 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 }
 
 func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
-	g := new(errgroup.Group)
 	results := SliceFor(protocol.CompletionResponse{}.Result, len(servers))
+	g, gctx := errgroup.WithContext(ctx)
 	for i, server := range servers {
 		g.Go(func() error {
-			if err := server.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
+			if err := server.Call(gctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
@@ -134,11 +134,11 @@ const codeActionDataServerKey = "lspmux.server"
 const codeActionDataOriginalDataKey = "lspmux.originalData"
 
 func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
-	g := new(errgroup.Group)
 	results := SliceFor(protocol.CodeActionResponse{}.Result, len(servers))
+	g, gctx := errgroup.WithContext(ctx)
 	for i, server := range servers {
 		g.Go(func() error {
-			if err := server.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
+			if err := server.Call(gctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
