@@ -40,13 +40,13 @@ func ContextLogMiddleware(name string) Middleware {
 		f := func(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 			attrs := []any{
 				slog.String("name", name),
-				slog.String("method", r.Method),
+				slog.String("handleMethod", r.Method),
 			}
 
 			if r.IsCall() {
-				attrs = append(attrs, slog.String("type", "request"), slog.Any("id", r.ID.Raw()))
+				attrs = append(attrs, slog.String("handleType", "request"), slog.Any("handleID", r.ID.Raw()))
 			} else {
-				attrs = append(attrs, slog.String("type", "notification"))
+				attrs = append(attrs, slog.String("handleType", "notification"))
 			}
 
 			ctx = slogctx.Prepend(ctx, attrs...)
