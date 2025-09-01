@@ -17,11 +17,14 @@ import (
 type ClientHandler struct {
 	conn           Respondable
 	serverRegistry *ServerConnectionRegistry
+	shutdown       bool
+	done           chan struct{}
 }
 
 func NewClientHandler(serverRegistry *ServerConnectionRegistry) *ClientHandler {
 	return &ClientHandler{
 		serverRegistry: serverRegistry,
+		done:           make(chan struct{}),
 	}
 }
 
@@ -29,8 +32,20 @@ func (h *ClientHandler) BindConnection(conn *jsonrpc2.Connection) {
 	h.conn = conn
 }
 
+func (h *ClientHandler) WaitExit() {
+	<-h.done
+}
+
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	h.serverRegistry.WaitReady()
+
+	if protocol.MethodKind(r.Method) == protocol.ExitMethod {
+		return nil, h.handleExitNotification(ctx)
+	}
+
+	if h.shutdown {
+		return nil, ErrInvalidRequest
+	}
 
 	servers := []*ServerConnection{}
 	for _, server := range h.serverRegistry.Servers() {
@@ -63,6 +78,8 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return h.handleCodeActionRequest(ctx, r, servers)
 	case protocol.CodeActionResolveMethod:
 		return h.handleCodeActionResolveRequest(ctx, r, servers)
+	case protocol.ShutdownMethod:
+		return h.handleShutdownRequest(ctx, r, servers)
 
 	default:
 		// Currently, request is sent to the first server only
@@ -239,4 +256,34 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 	}
 
 	return servers[i].CallWithRawResult(ctx, r.Method, params)
+}
+
+func (h *ClientHandler) handleShutdownRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+	g := new(errgroup.Group)
+	for _, server := range servers {
+		g.Go(func() error {
+			log := slog.With("server", server.Name)
+			if err := server.Call(ctx, r.Method, r.Params, nil); err != nil {
+				log.ErrorContext(ctx, "shutdown error")
+			}
+			if err := server.Notify(ctx, string(protocol.ExitMethod), nil); err != nil {
+				log.ErrorContext(ctx, "exit notification error")
+			}
+			if err := server.Close(); err != nil {
+				log.ErrorContext(ctx, "connection close error")
+			}
+			log.InfoContext(ctx, "server shutdown completed")
+
+			return nil
+		})
+	}
+	g.Wait()
+
+	h.shutdown = true
+	return []any{}, nil
+}
+
+func (h *ClientHandler) handleExitNotification(_ context.Context) error {
+	close(h.done)
+	return nil
 }

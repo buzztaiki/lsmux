@@ -60,8 +60,8 @@ func Start(ctx context.Context, cfg *Config) error {
 	}
 	slog.InfoContext(ctx, "lspmux started")
 
-	// TODO wait server connections
-	clientConn.Wait()
+	clientHandler.WaitExit()
+	defer slog.Info("lspmux exited")
 
 	return nil
 }
