@@ -14,39 +14,14 @@ import (
 	"golang.org/x/sync/errgroup"
 )
 
-type serverConn struct {
-	name string
-	Callable
-	initOptions   map[string]any
-	supportedCaps map[string]struct{}
-	caps          *protocol.ServerCapabilities
-}
-
-func (c *serverConn) call(ctx context.Context, method string, params any) (any, error) {
-	var res json.RawMessage
-	if err := c.callWithRes(ctx, method, params, &res); err != nil {
-		return nil, err
-	}
-	return res, nil
-}
-
-func (c *serverConn) callWithRes(ctx context.Context, method string, params any, res any) error {
-	slog.InfoContext(ctx, "send request to "+c.name)
-	return c.Call(ctx, method, params).Await(ctx, &res)
-}
-
 type ClientHandler struct {
-	conn Respondable
-	// TODO add server name to connection for better logging
-	serverConns []*serverConn
-	ready       chan (struct{})
-	nservers    int
+	conn           Respondable
+	serverRegistry *ServerConnectionRegistry
 }
 
-func NewClientHandler(nservers int) *ClientHandler {
+func NewClientHandler(serverRegistry *ServerConnectionRegistry) *ClientHandler {
 	return &ClientHandler{
-		ready:    make(chan struct{}),
-		nservers: nservers,
+		serverRegistry: serverRegistry,
 	}
 }
 
@@ -54,31 +29,17 @@ func (h *ClientHandler) BindConnection(conn *jsonrpc2.Connection) {
 	h.conn = conn
 }
 
-func (h *ClientHandler) AddServerConn(ctx context.Context, name string, conn *jsonrpc2.Connection, initOptions map[string]any) {
-	if len(h.serverConns) < h.nservers {
-		h.serverConns = append(h.serverConns, &serverConn{
-			name:        name,
-			Callable:    conn,
-			initOptions: initOptions,
-		})
-	}
-	if len(h.serverConns) == h.nservers {
-		close(h.ready)
-		slog.InfoContext(ctx, "all server connections established")
-	}
-}
-
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	<-h.ready
+	h.serverRegistry.WaitReady()
 
 	method := protocol.MethodKind(r.Method)
 	if method == protocol.InitializeMethod {
 		return h.handleInitializeRequest(ctx, r)
 	}
 
-	serverConns := []*serverConn{}
-	for _, conn := range h.serverConns {
-		if IsMethodSupported(r.Method, conn.supportedCaps) {
+	serverConns := []*ServerConnection{}
+	for _, conn := range h.serverRegistry.Servers() {
+		if IsMethodSupported(r.Method, conn.SupportedCapabilities) {
 			serverConns = append(serverConns, conn)
 		}
 	}
@@ -111,36 +72,36 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 			// Currently, request is sent to the first server only
 			// TODO Some methods should have their results merged
 			// TODO It would be nice if we could set how each method behaves
-			return serverConns[0].call(ctx, r.Method, r.Params)
+			return serverConns[0].DefaultCall(ctx, r.Method, r.Params)
 		}
 	})
 
 }
 
-func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
+func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
 	var params protocol.ExecuteCommandParams
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
 	}
 
-	commandSupported := func(c *serverConn) bool {
-		return slices.Index(c.caps.ExecuteCommandProvider.Commands, params.Command) != -1
+	commandSupported := func(c *ServerConnection) bool {
+		return slices.Index(c.Capabilities.ExecuteCommandProvider.Commands, params.Command) != -1
 	}
 
 	conn := serverConns[0]
-	if i := slices.IndexFunc(h.serverConns, commandSupported); i != -1 {
+	if i := slices.IndexFunc(serverConns, commandSupported); i != -1 {
 		conn = serverConns[i]
 	}
 
-	return conn.call(ctx, r.Method, r.Params)
+	return conn.DefaultCall(ctx, r.Method, r.Params)
 }
 
-func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
+func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
 	g := new(errgroup.Group)
 	results := SliceFor(protocol.CompletionResponse{}.Result, len(serverConns))
 	for i, conn := range serverConns {
 		g.Go(func() error {
-			if err := conn.callWithRes(ctx, r.Method, r.Params, &results[i]); err != nil {
+			if err := conn.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
@@ -177,12 +138,12 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 const codeActionDataServerKey = "lspmux.server"
 const codeActionDataOriginalDataKey = "lspmux.originalData"
 
-func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
+func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
 	g := new(errgroup.Group)
 	results := SliceFor(protocol.CodeActionResponse{}.Result, len(serverConns))
 	for i, conn := range serverConns {
 		g.Go(func() error {
-			if err := conn.callWithRes(ctx, r.Method, r.Params, &results[i]); err != nil {
+			if err := conn.Call(ctx, r.Method, r.Params, &results[i]); err != nil {
 				return err
 			}
 			return nil
@@ -197,7 +158,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 		for _, action := range OrZeroValue(r) {
 			if v, ok := action.Value.(protocol.CodeAction); ok {
 				// add server name to code action data for future resolve
-				v.Data = map[string]any{codeActionDataServerKey: serverConns[i].name, codeActionDataOriginalDataKey: v.Data}
+				v.Data = map[string]any{codeActionDataServerKey: serverConns[i].Name, codeActionDataOriginalDataKey: v.Data}
 				action.Value = v
 			}
 			res = append(res, action)
@@ -207,7 +168,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 	return &res, nil
 }
 
-func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
+func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*ServerConnection) (any, error) {
 	params := protocol.CodeActionResolveRequest{}.Params
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
@@ -231,30 +192,30 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 	}
 	params.Data = originalData
 
-	i := slices.IndexFunc(serverConns, func(c *serverConn) bool { return c.name == serverName })
+	i := slices.IndexFunc(serverConns, func(c *ServerConnection) bool { return c.Name == serverName })
 	if i == -1 {
 		return nil, ErrMethodNotFound
 	}
 
-	return serverConns[i].call(ctx, r.Method, params)
+	return serverConns[i].DefaultCall(ctx, r.Method, params)
 }
 
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	var merged map[string]any
-	for _, conn := range h.serverConns {
+	for _, conn := range h.serverRegistry.Servers() {
 		var kvParams map[string]any
 		if err := json.Unmarshal(r.Params, &kvParams); err != nil {
 			return nil, err
 		}
 
 		// override initializationOptions if configured
-		if len(conn.initOptions) != 0 {
-			slog.InfoContext(ctx, "override initializationOptions", "server", conn.name, "initOptions", conn.initOptions)
-			kvParams["initializationOptions"] = conn.initOptions
+		if len(conn.InitOptions) != 0 {
+			slog.InfoContext(ctx, "override initializationOptions", "server", conn.Name, "initOptions", conn.InitOptions)
+			kvParams["initializationOptions"] = conn.InitOptions
 		}
 
 		var rawRes json.RawMessage
-		if err := conn.callWithRes(ctx, r.Method, kvParams, &rawRes); err != nil {
+		if err := conn.Call(ctx, r.Method, kvParams, &rawRes); err != nil {
 			return nil, err
 		}
 
@@ -276,8 +237,8 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 		// respect the preceding value
 		// NOTE: mergo.Merge did not union array values
 		mergo.Merge(&merged, kvCaps)
-		conn.caps = &typedRes.Capabilities
-		conn.supportedCaps = CollectSupportedCapabilities(kvCaps)
+		conn.Capabilities = &typedRes.Capabilities
+		conn.SupportedCapabilities = CollectSupportedCapabilities(kvCaps)
 	}
 
 	return map[string]any{

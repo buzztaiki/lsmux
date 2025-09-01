@@ -12,13 +12,15 @@ import (
 )
 
 func Start(ctx context.Context, cfg *Config) error {
+	serverRegistry := NewServerConnectionRegistry(len(cfg.Servers))
+
 	clientPipe, err := NewIOPipeListener(ctx, os.Stdin, os.Stdout)
 	if err != nil {
 		return err
 	}
 	defer clientPipe.Close()
 
-	clientHandler := NewClientHandler(len(cfg.Servers))
+	clientHandler := NewClientHandler(serverRegistry)
 	clientBinder := NewMiddlewareBinder(NewBinder(clientHandler),
 		ContextLogMiddleware("ClientHandler"),
 		AccessLogMiddleware(),
@@ -46,6 +48,7 @@ func Start(ctx context.Context, cfg *Config) error {
 		serverBinder := NewMiddlewareBinder(NewBinder(serverHandler),
 			ContextLogMiddleware("ServerHandler("+serverCfg.Name+")"),
 			AccessLogMiddleware(),
+			NewTSServerRequestInterceptor(serverCfg.Name, serverRegistry).Handler,
 		)
 		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), serverBinder)
 		if err != nil {
@@ -53,7 +56,7 @@ func Start(ctx context.Context, cfg *Config) error {
 		}
 		defer serverConn.Close()
 
-		clientHandler.AddServerConn(ctx, serverCfg.Name, serverConn, serverCfg.InitializationOptions)
+		serverRegistry.Add(ctx, serverCfg.Name, serverConn, serverCfg.InitializationOptions)
 	}
 	slog.InfoContext(ctx, "lspmux started")
 

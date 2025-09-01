@@ -1,0 +1,72 @@
+package lspmux
+
+import (
+	"context"
+	"encoding/json"
+	"log/slog"
+
+	"github.com/myleshyson/lsprotocol-go/protocol"
+	"golang.org/x/exp/jsonrpc2"
+)
+
+type ServerConnection struct {
+	Name                  string
+	callable              Callable
+	InitOptions           map[string]any
+	SupportedCapabilities map[string]struct{}
+	Capabilities          *protocol.ServerCapabilities
+}
+
+func (c *ServerConnection) DefaultCall(ctx context.Context, method string, params any) (any, error) {
+	var res json.RawMessage
+	if err := c.Call(ctx, method, params, &res); err != nil {
+		return nil, err
+	}
+	return res, nil
+}
+
+func (c *ServerConnection) Call(ctx context.Context, method string, params any, res any) error {
+	slog.InfoContext(ctx, "send request to "+c.Name)
+	return c.callable.Call(ctx, method, params).Await(ctx, &res)
+}
+
+func (c *ServerConnection) Notify(ctx context.Context, method string, params any) error {
+	slog.InfoContext(ctx, "notify to "+c.Name)
+	return c.callable.Notify(ctx, method, params)
+}
+
+type ServerConnectionRegistry struct {
+	servers  []*ServerConnection
+	nservers int
+	ready    chan (struct{})
+}
+
+func NewServerConnectionRegistry(nservers int) *ServerConnectionRegistry {
+	return &ServerConnectionRegistry{
+		servers:  make([]*ServerConnection, 0, nservers),
+		nservers: nservers,
+		ready:    make(chan struct{}),
+	}
+}
+
+func (r *ServerConnectionRegistry) Add(ctx context.Context, name string, conn *jsonrpc2.Connection, initOptions map[string]any) {
+	if len(r.servers) < r.nservers {
+		r.servers = append(r.servers, &ServerConnection{
+			Name:        name,
+			callable:    conn,
+			InitOptions: initOptions,
+		})
+	}
+	if len(r.servers) == r.nservers {
+		close(r.ready)
+		slog.InfoContext(ctx, "all server connections established")
+	}
+}
+
+func (r *ServerConnectionRegistry) Servers() []*ServerConnection {
+	return r.servers
+}
+
+func (r *ServerConnectionRegistry) WaitReady() {
+	<-r.ready
+}
