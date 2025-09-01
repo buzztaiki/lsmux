@@ -19,7 +19,8 @@ func Start(ctx context.Context, cfg *Config) error {
 	defer clientPipe.Close()
 
 	clientHandler := NewClientHandler(len(cfg.Servers))
-	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(), NewBinder(clientHandler))
+	clientBinder := NewMiddlewareBinder(NewBinder(clientHandler), ContextLogMiddleware("client"))
+	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(), clientBinder)
 	if err != nil {
 		return err
 	}
@@ -38,7 +39,9 @@ func Start(ctx context.Context, cfg *Config) error {
 		}
 		defer serverPipe.Close()
 
-		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), NewBinder(NewServerHandler(serverCfg.Name, clientConn, diagRegistry)))
+		serverHandler := NewServerHandler(serverCfg.Name, clientConn, diagRegistry)
+		serverBinder := NewMiddlewareBinder(NewBinder(serverHandler), ContextLogMiddleware(serverCfg.Name))
+		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), serverBinder)
 		if err != nil {
 			return err
 		}
