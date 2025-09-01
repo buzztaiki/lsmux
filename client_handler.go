@@ -10,6 +10,7 @@ import (
 
 	"dario.cat/mergo"
 	"github.com/myleshyson/lsprotocol-go/protocol"
+	slogctx "github.com/veqryn/slog-context"
 	"golang.org/x/exp/jsonrpc2"
 	"golang.org/x/sync/errgroup"
 )
@@ -56,15 +57,13 @@ func (h *ClientHandler) AddServerConn(ctx context.Context, name string, conn *js
 }
 
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	// TODO logger and logging middlere
-	logger := slog.Default()
-	logger.InfoContext(ctx, "handle")
+	slog.InfoContext(ctx, "handle")
 
 	<-h.ready
 
 	method := protocol.MethodKind(r.Method)
 	if method == protocol.InitializeMethod {
-		return h.handleInitializeRequest(ctx, r, logger)
+		return h.handleInitializeRequest(ctx, r)
 	}
 
 	serverConns := []*serverConn{}
@@ -90,31 +89,32 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 	return HandleRequestAsAsync(ctx, r, h.conn, func() (any, error) {
 		switch method {
 		case protocol.WorkspaceExecuteCommandMethod:
-			return h.handleExecuteCommandRequest(ctx, r, serverConns, logger)
+			return h.handleExecuteCommandRequest(ctx, r, serverConns)
 		case protocol.TextDocumentCompletionMethod:
-			return h.handleCompletionRequest(ctx, r, serverConns, logger)
+			return h.handleCompletionRequest(ctx, r, serverConns)
 		case protocol.TextDocumentCodeActionMethod:
-			return h.handleCodeActionRequest(ctx, r, serverConns, logger)
+			return h.handleCodeActionRequest(ctx, r, serverConns)
 		case protocol.CodeActionResolveMethod:
-			return h.handleCodeActionResolveRequest(ctx, r, serverConns, logger)
+			return h.handleCodeActionResolveRequest(ctx, r, serverConns)
 
 		default:
 			// Currently, request is sent to the first server only
 			// TODO Some methods should have their results merged
 			// TODO It would be nice if we could set how each method behaves
 			conn := serverConns[0]
-			return ForwardRequest(ctx, r, conn, logger.With("server", conn.name))
+			ctx = slogctx.Append(ctx, "server", conn.name)
+			return ForwardRequest(ctx, r, conn)
 		}
-	}, logger)
+	})
 
 }
 
-func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
+func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
 	var params protocol.ExecuteCommandParams
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
 	}
-	logger = logger.With("command", params.Command)
+	ctx = slogctx.Append(ctx, "command", params.Command)
 
 	commandSupported := func(c *serverConn) bool {
 		return slices.Index(c.caps.ExecuteCommandProvider.Commands, params.Command) != -1
@@ -125,10 +125,11 @@ func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *json
 		conn = serverConns[i]
 	}
 
-	return ForwardRequest(ctx, r, conn, logger.With("server", conn.name))
+	ctx = slogctx.Append(ctx, "server", conn.name)
+	return ForwardRequest(ctx, r, conn)
 }
 
-func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
+func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
 	g := new(errgroup.Group)
 	results := SliceFor(protocol.CompletionResponse{}.Result, len(serverConns))
 	for i, conn := range serverConns {
@@ -136,14 +137,14 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
 				return err
 			}
-			logger.InfoContext(ctx, "completion result received", "server", conn.name)
+			slog.InfoContext(ctx, "completion result received", "server", conn.name)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	logger.InfoContext(ctx, "all completion results received")
+	slog.InfoContext(ctx, "all completion results received")
 
 	var res protocol.CompletionList
 
@@ -157,10 +158,10 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 	for i, r := range results {
 		switch v := r.Value.(type) {
 		case []protocol.CompletionItem:
-			logger.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v))
+			slog.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v))
 			res.Items = append(res.Items, v...)
 		case protocol.CompletionList:
-			logger.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v.Items))
+			slog.InfoContext(ctx, "completion items", "server", serverConns[i].name, "nitems", len(v.Items))
 			res.Items = append(res.Items, v.Items...)
 		case nil:
 		// do nothing
@@ -175,7 +176,7 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 const codeActionDataServerKey = "lspmux.server"
 const codeActionDataOriginalDataKey = "lspmux.originalData"
 
-func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, logger *slog.Logger) (any, error) {
+func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
 	g := new(errgroup.Group)
 	results := SliceFor(protocol.CodeActionResponse{}.Result, len(serverConns))
 	for i, conn := range serverConns {
@@ -183,14 +184,14 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 			if err := conn.Call(ctx, r.Method, r.Params).Await(ctx, &results[i]); err != nil {
 				return err
 			}
-			logger.InfoContext(ctx, "codeAction result received", "server", conn.name)
+			slog.InfoContext(ctx, "codeAction result received", "server", conn.name)
 			return nil
 		})
 	}
 	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	logger.InfoContext(ctx, "all codeAction results received")
+	slog.InfoContext(ctx, "all codeAction results received")
 
 	res := OrZeroValue(protocol.CodeActionResponse{}.Result)
 	for i, r := range results {
@@ -207,7 +208,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 	return &res, nil
 }
 
-func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn, _ *slog.Logger) (any, error) {
+func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, serverConns []*serverConn) (any, error) {
 	params := protocol.CodeActionResolveRequest{}.Params
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
@@ -243,7 +244,7 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 	return res, nil
 }
 
-func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, logger *slog.Logger) (any, error) {
+func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 	var merged map[string]any
 	for _, conn := range h.serverConns {
 		var kvParams map[string]any
@@ -253,7 +254,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 
 		// override initializationOptions if configured
 		if len(conn.initOptions) != 0 {
-			logger.InfoContext(ctx, "override initializationOptions", "initOptions", conn.initOptions)
+			slog.InfoContext(ctx, "override initializationOptions", "initOptions", conn.initOptions)
 			kvParams["initializationOptions"] = conn.initOptions
 		}
 
