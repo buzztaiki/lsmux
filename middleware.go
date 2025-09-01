@@ -56,35 +56,24 @@ func ContextLogMiddleware(name string) Middleware {
 	}
 }
 
-type startTimeCtxKey struct{}
-
 func AccessLogMiddleware() Middleware {
 	return func(next jsonrpc2.Handler) jsonrpc2.Handler {
 		f := func(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-			return WithAccessLog(ctx, func(ctx context.Context) (any, error) {
-				return next.Handle(ctx, r)
-			})
+			start := time.Now()
+			res, err := next.Handle(ctx, r)
+
+			log := slog.With("duration", time.Since(start))
+			if err != nil {
+				if err == jsonrpc2.ErrAsyncResponse {
+					log.InfoContext(ctx, "SUCCESS (async)")
+				} else {
+					log.ErrorContext(ctx, "ERROR", "error", err)
+				}
+			} else {
+				log.InfoContext(ctx, "SUCCESS")
+			}
+			return res, err
 		}
 		return jsonrpc2.HandlerFunc(f)
 	}
-}
-
-func WithAccessLog(ctx context.Context, f func(ctx context.Context) (any, error)) (any, error) {
-	var start time.Time
-	if st, ok := ctx.Value(startTimeCtxKey{}).(time.Time); ok {
-		start = st
-	} else {
-		start = time.Now()
-		ctx = context.WithValue(ctx, startTimeCtxKey{}, start)
-	}
-
-	res, err := f(ctx)
-	if err != nil && err != jsonrpc2.ErrAsyncResponse {
-		slog.ErrorContext(ctx, "ERROR", "error", err, "duration", time.Since(start))
-	} else if err == nil {
-		slog.InfoContext(ctx, "SUCCESS", "duration", time.Since(start))
-	}
-
-	return res, err
-
 }
