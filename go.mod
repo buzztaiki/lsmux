@@ -1,4 +1,4 @@
-module github.com/buzztaiki/lspmux
+module github.com/buzztaiki/lsmux
 
 go 1.24.6
 
