@@ -45,5 +45,5 @@ func CLI() error {
 		return err
 	}
 
-	return Start(context.Background(), cfg)
+	return Execute(context.Background(), cfg)
 }

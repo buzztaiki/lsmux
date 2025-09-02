@@ -11,7 +11,7 @@ import (
 	"golang.org/x/exp/jsonrpc2"
 )
 
-func Start(ctx context.Context, cfg *Config) error {
+func Execute(ctx context.Context, cfg *Config) error {
 	serverRegistry := NewServerConnectionRegistry(len(cfg.Servers))
 
 	clientPipe, err := NewIOPipeListener(ctx, os.Stdin, os.Stdout)
