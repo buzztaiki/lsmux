@@ -8,7 +8,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/lmittmann/tint"
 	slogctx "github.com/veqryn/slog-context"
 )
 
@@ -21,7 +20,14 @@ func CLI() error {
 	flag.Parse()
 
 	logHandler := slogctx.NewHandler(
-		tint.NewHandler(os.Stderr, &tint.Options{NoColor: true, TimeFormat: time.DateTime + ".000"}),
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				if a.Key == slog.TimeKey {
+					return slog.String(a.Key, a.Value.Time().Format(time.DateTime+".000"))
+				}
+				return a
+			},
+		}),
 		nil)
 	slog.SetDefault(slog.New(logHandler))
 

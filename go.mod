@@ -6,7 +6,6 @@ require (
 	dario.cat/mergo v1.0.2
 	github.com/goccy/go-yaml v1.18.0
 	github.com/google/uuid v1.6.0
-	github.com/lmittmann/tint v1.1.2
 	github.com/myleshyson/lsprotocol-go v1.0.2
 	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/exp/jsonrpc2 v0.0.0-20250819193227-8b4c13bb791b
