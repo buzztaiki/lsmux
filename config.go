@@ -1,4 +1,4 @@
-package lspmux
+package lsmux
 
 import (
 	"fmt"

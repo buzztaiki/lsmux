@@ -1,4 +1,4 @@
-package lspmux
+package lsmux
 
 import (
 	"context"
@@ -58,10 +58,10 @@ func Execute(ctx context.Context, cfg *Config) error {
 
 		serverRegistry.Add(ctx, serverCfg.Name, serverConn, serverCfg.InitializationOptions)
 	}
-	slog.InfoContext(ctx, "lspmux started")
+	slog.InfoContext(ctx, "lsmux started")
 
 	clientHandler.WaitExit()
-	defer slog.Info("lspmux exited")
+	defer slog.Info("lsmux exited")
 
 	return nil
 }

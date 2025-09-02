@@ -27,5 +27,5 @@ servers:
              '(((js-mode :language-id "javascript") (js-ts-mode :language-id "javascript")
                 typescript-ts-mode typescript-mode
                 vue-mode vue-ts-mode)
-               "lspmux" "--config" "/path/to/config.yaml" "--servers" "vuels,tsls"))
+               "lsmux" "--config" "/path/to/config.yaml" "--servers" "vuels,tsls"))
 ```

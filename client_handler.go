@@ -1,4 +1,4 @@
-package lspmux
+package lsmux
 
 import (
 	"context"
@@ -130,7 +130,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 
 	return map[string]any{
 		"serverInfo": map[string]any{
-			"name": "lspmux", // TODO configurable
+			"name": "lsmux", // TODO configurable
 		},
 		"capabilities": merged,
 	}, nil
@@ -193,8 +193,8 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 	return &res, nil
 }
 
-const codeActionDataServerKey = "lspmux.server"
-const codeActionDataOriginalDataKey = "lspmux.originalData"
+const codeActionDataServerKey = "lsmux.server"
+const codeActionDataOriginalDataKey = "lsmux.originalData"
 
 func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
 	results := SliceFor(protocol.CodeActionResponse{}.Result, len(servers))
