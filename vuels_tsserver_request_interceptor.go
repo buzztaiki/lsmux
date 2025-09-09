@@ -11,21 +11,21 @@ import (
 	"golang.org/x/exp/jsonrpc2"
 )
 
-// TSServerRequestInterceptor intercepts "tsserver/request" notifications to support vuels v3 features.
+// VuelsTSServerRequestInterceptor intercepts "tsserver/request" notifications to support vuels v3 features.
 // see https://github.com/vuejs/language-tools/discussions/5456
-type TSServerRequestInterceptor struct {
+type VuelsTSServerRequestInterceptor struct {
 	name           string
 	serverRegistry *ServerConnectionRegistry
 }
 
-func NewTSServerRequestInterceptor(name string, serverRegistry *ServerConnectionRegistry) *TSServerRequestInterceptor {
-	return &TSServerRequestInterceptor{
+func NewVuelsTSServerRequestInterceptor(name string, serverRegistry *ServerConnectionRegistry) *VuelsTSServerRequestInterceptor {
+	return &VuelsTSServerRequestInterceptor{
 		name:           name,
 		serverRegistry: serverRegistry,
 	}
 }
 
-func (h *TSServerRequestInterceptor) Handler(next jsonrpc2.Handler) jsonrpc2.Handler {
+func (h *VuelsTSServerRequestInterceptor) Handler(next jsonrpc2.Handler) jsonrpc2.Handler {
 	f := func(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 		if !r.IsCall() && r.Method == "tsserver/request" {
 			slog.InfoContext(ctx, "intercept tsserver/request notification")
@@ -36,7 +36,7 @@ func (h *TSServerRequestInterceptor) Handler(next jsonrpc2.Handler) jsonrpc2.Han
 	return jsonrpc2.HandlerFunc(f)
 }
 
-func (h *TSServerRequestInterceptor) handleTsServerRequest(ctx context.Context, r *jsonrpc2.Request) error {
+func (h *VuelsTSServerRequestInterceptor) handleTsServerRequest(ctx context.Context, r *jsonrpc2.Request) error {
 	h.serverRegistry.WaitReady()
 
 	var params [][]json.RawMessage
@@ -78,7 +78,7 @@ func (h *TSServerRequestInterceptor) handleTsServerRequest(ctx context.Context, 
 	return server.Notify(ctx, "tsserver/response", [][]any{{id, execRes.Body}})
 }
 
-func (h *TSServerRequestInterceptor) findSelf() (*ServerConnection, error) {
+func (h *VuelsTSServerRequestInterceptor) findSelf() (*ServerConnection, error) {
 	for _, sc := range h.serverRegistry.Servers() {
 		if sc.Name == h.name {
 			return sc, nil
@@ -87,7 +87,7 @@ func (h *TSServerRequestInterceptor) findSelf() (*ServerConnection, error) {
 	return nil, fmt.Errorf("connection not found: %s", h.name)
 }
 
-func (h *TSServerRequestInterceptor) findCommandSupported(command string) (*ServerConnection, error) {
+func (h *VuelsTSServerRequestInterceptor) findCommandSupported(command string) (*ServerConnection, error) {
 	for _, sc := range h.serverRegistry.Servers() {
 		if slices.Index(sc.Capabilities.ExecuteCommandProvider.Commands, command) != -1 {
 			return sc, nil

@@ -48,7 +48,7 @@ func Execute(ctx context.Context, cfg *Config) error {
 		serverBinder := NewMiddlewareBinder(NewBinder(serverHandler),
 			ContextLogMiddleware("ServerHandler("+serverCfg.Name+")"),
 			AccessLogMiddleware(),
-			NewTSServerRequestInterceptor(serverCfg.Name, serverRegistry).Handler,
+			NewVuelsTSServerRequestInterceptor(serverCfg.Name, serverRegistry).Handler,
 		)
 		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), serverBinder)
 		if err != nil {
