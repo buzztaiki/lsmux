@@ -1,24 +1,24 @@
 package lsmux
 
-func IsMethodSupported(method string, caps map[string]struct{}) bool {
+func IsMethodSupported(method string, supportedCaps map[string]struct{}) bool {
 	methodCap, useCap := MethodToCapability[method]
 	if !useCap {
 		return true
 	}
 
-	_, supported := caps[methodCap]
+	_, supported := supportedCaps[methodCap]
 	return supported
 }
 
 // CollectSupportedCapabilities returns a map of dot notated capability to whether it's supported or not.
-func CollectSupportedCapabilities(caps map[string]any) map[string]struct{} {
+func CollectSupportedCapabilities(kvCaps map[string]any) map[string]struct{} {
 	res := map[string]struct{}{}
-	collectSupportedCapabilities("", caps, res)
+	collectSupportedCapabilities("", kvCaps, res)
 	return res
 }
 
-func collectSupportedCapabilities(prefix string, caps map[string]any, res map[string]struct{}) {
-	for k, v := range caps {
+func collectSupportedCapabilities(prefix string, kvCaps map[string]any, res map[string]struct{}) {
+	for k, v := range kvCaps {
 		switch v := v.(type) {
 		case map[string]any:
 			res[prefix+k] = struct{}{}
