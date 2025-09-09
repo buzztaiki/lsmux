@@ -211,9 +211,9 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 		return nil, err
 	}
 
-	res := OrZeroValue(protocol.CodeActionResponse{}.Result)
+	res := Deref(protocol.CodeActionResponse{}.Result)
 	for i, r := range results {
-		for _, action := range OrZeroValue(r) {
+		for _, action := range Deref(r) {
 			if v, ok := action.Value.(protocol.CodeAction); ok {
 				// add server name to code action data for future resolve
 				v.Data = map[string]any{codeActionDataServerKey: servers[i].Name, codeActionDataOriginalDataKey: v.Data}

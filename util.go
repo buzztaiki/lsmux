@@ -5,7 +5,7 @@ func SliceFor[T any](t T, n int) []T {
 	return make([]T, n)
 }
 
-func OrZeroValue[T any](t *T) T {
+func Deref[T any](t *T) T {
 	if t == nil {
 		var zero T
 		return zero
