@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"slices"
 
 	"dario.cat/mergo"
 	"github.com/myleshyson/lsprotocol-go/protocol"
@@ -37,8 +36,6 @@ func (h *ClientHandler) WaitExit() {
 }
 
 func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {
-	h.serverRegistry.WaitReady()
-
 	if protocol.MethodKind(r.Method) == protocol.ExitMethod {
 		return nil, h.handleExitNotification(ctx)
 	}
@@ -47,13 +44,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 		return nil, ErrInvalidRequest
 	}
 
-	servers := []*ServerConnection{}
-	for _, server := range h.serverRegistry.Servers() {
-		if IsMethodSupported(r.Method, server.SupportedCapabilities) {
-			servers = append(servers, server)
-		}
-	}
-
+	servers := h.serverRegistry.Servers().FilterBySupportedMethod(r.Method)
 	if len(servers) == 0 {
 		return nil, ErrMethodNotFound
 	}
@@ -87,7 +78,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 	}
 }
 
-func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, servers ServerConnectionList) (any, error) {
 	var merged map[string]any
 	for _, server := range servers {
 		var kvParams map[string]any
@@ -136,25 +127,21 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 	}, nil
 }
 
-func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleExecuteCommandRequest(ctx context.Context, r *jsonrpc2.Request, servers ServerConnectionList) (any, error) {
 	var params protocol.ExecuteCommandParams
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
 	}
 
-	commandSupported := func(s *ServerConnection) bool {
-		return slices.Index(s.Capabilities.ExecuteCommandProvider.Commands, params.Command) != -1
-	}
-
-	server := servers[0]
-	if i := slices.IndexFunc(servers, commandSupported); i != -1 {
-		server = servers[i]
+	server, found := servers.FindByCommand(params.Command)
+	if !found {
+		server = servers[0]
 	}
 
 	return server.CallWithRawResult(ctx, r.Method, r.Params)
 }
 
-func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2.Request, servers ServerConnectionList) (any, error) {
 	results := SliceFor(protocol.CompletionResponse{}.Result, len(servers))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, server := range servers {
@@ -183,8 +170,7 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 			res.Items = append(res.Items, v...)
 		case protocol.CompletionList:
 			res.Items = append(res.Items, v.Items...)
-		case nil:
-		// do nothing
+		case nil: // do nothing
 		default:
 			panic(fmt.Sprintf("invalid completion result type: %T", v))
 		}
@@ -196,7 +182,7 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 const codeActionDataServerKey = "lsmux.server"
 const codeActionDataOriginalDataKey = "lsmux.originalData"
 
-func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2.Request, servers ServerConnectionList) (any, error) {
 	results := SliceFor(protocol.CodeActionResponse{}.Result, len(servers))
 	g, gctx := errgroup.WithContext(ctx)
 	for i, server := range servers {
@@ -226,7 +212,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 	return &res, nil
 }
 
-func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *jsonrpc2.Request, servers ServerConnectionList) (any, error) {
 	params := protocol.CodeActionResolveRequest{}.Params
 	if err := json.Unmarshal(r.Params, &params); err != nil {
 		return nil, err
@@ -250,15 +236,15 @@ func (h *ClientHandler) handleCodeActionResolveRequest(ctx context.Context, r *j
 	}
 	params.Data = originalData
 
-	i := slices.IndexFunc(servers, func(s *ServerConnection) bool { return s.Name == serverName })
-	if i == -1 {
+	server, found := servers.FindByName(serverName)
+	if !found {
 		return nil, ErrMethodNotFound
 	}
 
-	return servers[i].CallWithRawResult(ctx, r.Method, params)
+	return server.CallWithRawResult(ctx, r.Method, params)
 }
 
-func (h *ClientHandler) handleShutdownRequest(ctx context.Context, r *jsonrpc2.Request, servers []*ServerConnection) (any, error) {
+func (h *ClientHandler) handleShutdownRequest(ctx context.Context, r *jsonrpc2.Request, servers ServerConnectionList) (any, error) {
 	g := new(errgroup.Group)
 	for _, server := range servers {
 		g.Go(func() error {

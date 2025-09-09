@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"log/slog"
+	"slices"
 
 	"github.com/myleshyson/lsprotocol-go/protocol"
 	"golang.org/x/exp/jsonrpc2"
@@ -67,10 +68,39 @@ func (r *ServerConnectionRegistry) Add(ctx context.Context, name string, conn *j
 	}
 }
 
-func (r *ServerConnectionRegistry) Servers() []*ServerConnection {
+type ServerConnectionList []*ServerConnection
+
+func (r *ServerConnectionRegistry) Servers() ServerConnectionList {
+	<-r.ready
 	return r.servers
 }
 
-func (r *ServerConnectionRegistry) WaitReady() {
-	<-r.ready
+func (l ServerConnectionList) FilterBySupportedMethod(method string) ServerConnectionList {
+	servers := []*ServerConnection{}
+	for _, s := range l {
+		if IsMethodSupported(method, s.SupportedCapabilities) {
+			servers = append(servers, s)
+		}
+	}
+	return servers
+}
+
+func (l ServerConnectionList) FindByName(name string) (*ServerConnection, bool) {
+	i := slices.IndexFunc(l, func(s *ServerConnection) bool { return s.Name == name })
+	if i == -1 {
+		return nil, false
+	}
+	return l[i], true
+}
+
+func (l ServerConnectionList) FindByCommand(command string) (*ServerConnection, bool) {
+	commandSupported := func(s *ServerConnection) bool {
+		return slices.Index(s.Capabilities.ExecuteCommandProvider.Commands, command) != -1
+	}
+
+	i := slices.IndexFunc(l, commandSupported)
+	if i == -1 {
+		return nil, false
+	}
+	return l[i], true
 }
