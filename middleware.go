@@ -3,6 +3,7 @@ package lsmux
 import (
 	"context"
 	"encoding/base32"
+	"errors"
 	"log/slog"
 	"strings"
 	"time"
@@ -69,15 +70,14 @@ func AccessLogMiddleware() Middleware {
 			res, err := next.Handle(ctx, r)
 
 			log := slog.With("duration", time.Since(start))
-			if err != nil {
-				if err == jsonrpc2.ErrAsyncResponse {
-					log.InfoContext(ctx, "SUCCESS (async)")
-				} else {
-					log.ErrorContext(ctx, "ERROR", "error", err)
-				}
-			} else {
+			if err == nil {
 				log.InfoContext(ctx, "SUCCESS")
+			} else if errors.Is(err, jsonrpc2.ErrAsyncResponse) {
+				log.InfoContext(ctx, "SUCCESS (async)")
+			} else {
+				log.ErrorContext(ctx, "ERROR", "error", err)
 			}
+
 			return res, err
 		}
 		return jsonrpc2.HandlerFunc(f)
