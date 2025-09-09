@@ -5,6 +5,7 @@ import (
 	"flag"
 	"log/slog"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -12,7 +13,16 @@ import (
 )
 
 func CLI() error {
-	configPath := "config.yaml"
+	configHome := os.Getenv("XDG_CONFIG_HOME")
+	if configHome == "" {
+		homeDir, err := os.UserHomeDir()
+		if err != nil {
+			return err
+		}
+		configHome = filepath.Join(homeDir, ".config")
+	}
+
+	configPath := filepath.Join(configHome, "lsmux/config.yaml")
 	serverNamesValue := ""
 
 	flag.StringVar(&configPath, "config", configPath, "path to config file")
