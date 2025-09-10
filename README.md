@@ -5,7 +5,7 @@ A language server multiplexer.
 ## Installation
 
 ```console
-% go install github.com/gnolang/lsmux/cmd/lsmux@latest
+% go install github.com/buzztaiki/lsmux/cmd/lsmux@latest
 ```
 
 ## Usage
