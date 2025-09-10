@@ -1,8 +1,17 @@
-# lsp multiplexer
+# lsmux
 
-## vue-language-server v3 configuration
+A language server multiplexer.
 
-`config.yaml`:
+## Installation
+
+```console
+% go install github.com/gnolang/lsmux/cmd/lsmux@latest
+```
+
+## Usage
+
+Put your configuration to `$HOME/.config/lsmux/config.yaml` as shown below:
+
 ```yaml
 servers:
   - name: tsls
@@ -19,13 +28,53 @@ servers:
     command: vue-language-server
     args: [--stdio]
 
+  - name: eslint
+    command: eslint-language-server
+    args: [--stdio]
+
+  - name: pyright
+    command: pyright-langserver
+    args: [--stdio]
+
+  - name: ruff
+    command: ruff
+    args: [server]
 ```
 
-`init.el`:
+
+Run it by specifying the language servers you want to run simultaneously with the `--servers` option as shown below:
+
+```console
+% lsmux --servers tsls,vuels,eslint
+% lsmux --servers pyright,ruff
+```
+
+Write it as follows for Eglot:
+
 ```elisp
 (add-to-list 'eglot-server-programs
              '(((js-mode :language-id "javascript") (js-ts-mode :language-id "javascript")
-                typescript-ts-mode typescript-mode
+                typescript-mode typescript-ts-mode
                 vue-mode vue-ts-mode)
-               "lsmux" "--config" "/path/to/config.yaml" "--servers" "vuels,tsls"))
+               "lsmux" "--servers" "tsls,vuels,eslint"))
+(add-to-list 'eglot-server-programs
+             '((python-ts-mode python-mode) "lsmux" "--servers", "pyright,ruff"))
 ```
+
+## Features
+- Merge completion results from all servers.
+- Merge Diagnostics notifications from all servers.
+- Dispatch Code Action and Execute Command.
+- Transfer requests other than the above to the first capable server.
+- Transfer notifications to all servers.
+- Support `tsserver/request` for vuels v3.
+
+## Alternatives
+
+- https://github.com/thefrontside/lspx
+- https://gitlab.com/tmtms/lsp_router
+- https://github.com/garyo/lsp-multiplexer
+
+## License
+
+MIT
