@@ -29,18 +29,6 @@ func CLI() error {
 	flag.StringVar(&serverNamesValue, "servers", serverNamesValue, "comma-separated server names to start (or empty to start all servers)")
 	flag.Parse()
 
-	logHandler := slogctx.NewHandler(
-		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-				if a.Key == slog.TimeKey {
-					return slog.String(a.Key, a.Value.Time().Format(time.DateTime+".000"))
-				}
-				return a
-			},
-		}),
-		nil)
-	slog.SetDefault(slog.New(logHandler))
-
 	var serverNames []string
 	for name := range strings.SplitSeq(serverNamesValue, ",") {
 		name = strings.TrimSpace(name)
@@ -54,6 +42,19 @@ func CLI() error {
 	if err != nil {
 		return err
 	}
+
+	logHandler := slogctx.NewHandler(
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
+			Level: cfg.LogLevel,
+			ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+				if a.Key == slog.TimeKey {
+					return slog.String(a.Key, a.Value.Time().Format(time.DateTime+".000"))
+				}
+				return a
+			},
+		}),
+		nil)
+	slog.SetDefault(slog.New(logHandler))
 
 	return Execute(context.Background(), cfg)
 }

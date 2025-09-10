@@ -23,7 +23,7 @@ func Execute(ctx context.Context, cfg *Config) error {
 	clientHandler := NewClientHandler(serverRegistry)
 	clientBinder := NewMiddlewareBinder(NewBinder(clientHandler),
 		ContextLogMiddleware("ClientHandler"),
-		AccessLogMiddleware(),
+		LoggingMiddleware(),
 	)
 	clientConn, err := jsonrpc2.Dial(ctx, clientPipe.Dialer(), clientBinder)
 	if err != nil {
@@ -47,7 +47,7 @@ func Execute(ctx context.Context, cfg *Config) error {
 		serverHandler := NewServerHandler(serverCfg.Name, clientConn, diagRegistry)
 		serverBinder := NewMiddlewareBinder(NewBinder(serverHandler),
 			ContextLogMiddleware("ServerHandler("+serverCfg.Name+")"),
-			AccessLogMiddleware(),
+			LoggingMiddleware(),
 			NewVuelsTSServerRequestInterceptor(serverCfg.Name, serverRegistry).Handler,
 		)
 		serverConn, err := jsonrpc2.Dial(ctx, serverPipe.Dialer(), serverBinder)
@@ -61,7 +61,7 @@ func Execute(ctx context.Context, cfg *Config) error {
 	slog.InfoContext(ctx, "lsmux started")
 
 	clientHandler.WaitExit()
-	defer slog.Info("lsmux exited")
+	defer slog.InfoContext(ctx, "lsmux exited")
 
 	return nil
 }

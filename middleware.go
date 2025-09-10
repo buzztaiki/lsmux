@@ -63,7 +63,7 @@ func ContextLogMiddleware(name string) Middleware {
 	}
 }
 
-func AccessLogMiddleware() Middleware {
+func LoggingMiddleware() Middleware {
 	return func(next jsonrpc2.Handler) jsonrpc2.Handler {
 		f := func(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 			start := time.Now()
@@ -71,9 +71,9 @@ func AccessLogMiddleware() Middleware {
 
 			log := slog.With("duration", time.Since(start))
 			if err == nil {
-				log.InfoContext(ctx, "SUCCESS")
+				log.DebugContext(ctx, "SUCCESS")
 			} else if errors.Is(err, jsonrpc2.ErrAsyncResponse) {
-				log.InfoContext(ctx, "SUCCESS (async)")
+				log.DebugContext(ctx, "SUCCESS (async)")
 			} else {
 				log.ErrorContext(ctx, "ERROR", "error", err)
 			}

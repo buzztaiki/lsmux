@@ -2,6 +2,7 @@ package lsmux
 
 import (
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
 
@@ -9,9 +10,8 @@ import (
 )
 
 type Config struct {
-	// TODO init args
-	// TODO request priority / merge policy
-	Servers []ServerConfig `yaml:"servers"` // use slice to respect config order
+	LogLevel slog.Level     `yaml:"logLevel"`
+	Servers  []ServerConfig `yaml:"servers"` // use slice to respect config order
 }
 
 type ServerConfig struct {
@@ -21,15 +21,15 @@ type ServerConfig struct {
 	InitializationOptions map[string]any `yaml:"initializationOptions"`
 }
 
-type ServerConfigList []ServerConfig
-
 func LoadConfig(fname string, serverNames []string) (*Config, error) {
 	data, err := os.ReadFile(fname)
 	if err != nil {
 		return nil, err
 	}
 
-	var cfg Config
+	cfg := Config{
+		LogLevel: slog.LevelInfo,
+	}
 	if err := yaml.Unmarshal(data, &cfg); err != nil {
 		return nil, err
 	}

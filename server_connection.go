@@ -27,12 +27,12 @@ func (c *ServerConnection) CallWithRawResult(ctx context.Context, method string,
 }
 
 func (c *ServerConnection) Call(ctx context.Context, method string, params any, res any) error {
-	slog.InfoContext(ctx, "send request to "+c.Name, "method", method)
+	slog.DebugContext(ctx, "send request to "+c.Name, "method", method)
 	return c.conn.Call(ctx, method, params).Await(ctx, &res)
 }
 
 func (c *ServerConnection) Notify(ctx context.Context, method string, params any) error {
-	slog.InfoContext(ctx, "notify to "+c.Name, "method", method)
+	slog.DebugContext(ctx, "notify to "+c.Name, "method", method)
 	return c.conn.Notify(ctx, method, params)
 }
 

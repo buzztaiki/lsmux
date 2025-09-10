@@ -27,7 +27,7 @@ func NewVuelsTSServerRequestInterceptor(name string, serverRegistry *ServerConne
 func (h *VuelsTSServerRequestInterceptor) Handler(next jsonrpc2.Handler) jsonrpc2.Handler {
 	f := func(ctx context.Context, r *jsonrpc2.Request) (any, error) {
 		if !r.IsCall() && r.Method == "tsserver/request" {
-			slog.InfoContext(ctx, "intercept tsserver/request notification")
+			slog.DebugContext(ctx, "intercept tsserver/request notification")
 			return nil, h.handleTsServerRequest(ctx, r)
 		}
 		return next.Handle(ctx, r)

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 
 	"dario.cat/mergo"
 	"github.com/myleshyson/lsprotocol-go/protocol"
@@ -88,7 +90,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 
 		// override initializationOptions if configured
 		if len(server.InitOptions) != 0 {
-			slog.InfoContext(ctx, "override initializationOptions", "server", server.Name, "initOptions", server.InitOptions)
+			slog.DebugContext(ctx, "override initializationOptions", "server", server.Name, "initOptions", server.InitOptions)
 			kvParams["initializationOptions"] = server.InitOptions
 		}
 
@@ -117,6 +119,11 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 		mergo.Merge(&merged, kvCaps)
 		server.Capabilities = &typedRes.Capabilities
 		server.SupportedCapabilities = CollectSupportedCapabilities(kvCaps)
+
+		slog.DebugContext(ctx, "server capabilities",
+			"server", server.Name,
+			"capabilities", kvCaps,
+			"supportedCapabilities", slices.Collect(maps.Keys(server.SupportedCapabilities)))
 	}
 
 	return map[string]any{
@@ -250,13 +257,13 @@ func (h *ClientHandler) handleShutdownRequest(ctx context.Context, r *jsonrpc2.R
 		g.Go(func() error {
 			log := slog.With("server", server.Name)
 			if err := server.Call(ctx, r.Method, r.Params, nil); err != nil {
-				log.ErrorContext(ctx, "shutdown error")
+				log.WarnContext(ctx, "shutdown error", "error", err)
 			}
 			if err := server.Notify(ctx, string(protocol.ExitMethod), nil); err != nil {
-				log.ErrorContext(ctx, "exit notification error")
+				log.WarnContext(ctx, "exit notification error", "error", err)
 			}
 			if err := server.Close(); err != nil {
-				log.ErrorContext(ctx, "connection close error")
+				log.WarnContext(ctx, "connection close error", "error", err)
 			}
 			log.InfoContext(ctx, "server shutdown completed")
 
