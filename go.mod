@@ -9,7 +9,7 @@ require (
 	github.com/myleshyson/lsprotocol-go v1.0.2
 	github.com/veqryn/slog-context v0.8.0
 	golang.org/x/exp/jsonrpc2 v0.0.0-20250819193227-8b4c13bb791b
-	golang.org/x/sync v0.16.0
+	golang.org/x/sync v0.17.0
 )
 
 require (
