@@ -9,18 +9,6 @@ import (
 	"golang.org/x/exp/jsonrpc2"
 )
 
-type Callable interface {
-	// see [jsonrpc2.Connection.Call]
-	Call(ctx context.Context, method string, params any) *jsonrpc2.AsyncCall
-	// see [jsonrpc2.Connection.Notify]
-	Notify(ctx context.Context, method string, params any) error
-}
-
-type Respondable interface {
-	// see [jsonrpc2.Connection.Respond]
-	Respond(id jsonrpc2.ID, result any, rerr error) error
-}
-
 type Binder struct {
 	h jsonrpc2.Handler
 }

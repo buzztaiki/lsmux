@@ -16,7 +16,6 @@ import (
 )
 
 type ClientHandler struct {
-	conn           Respondable
 	serverRegistry *ServerConnectionRegistry
 	shutdown       bool
 	done           chan struct{}
@@ -27,10 +26,6 @@ func NewClientHandler(serverRegistry *ServerConnectionRegistry) *ClientHandler {
 		serverRegistry: serverRegistry,
 		done:           make(chan struct{}),
 	}
-}
-
-func (h *ClientHandler) BindConnection(conn *jsonrpc2.Connection) {
-	h.conn = conn
 }
 
 func (h *ClientHandler) WaitExit() {
@@ -153,10 +148,7 @@ func (h *ClientHandler) handleCompletionRequest(ctx context.Context, r *jsonrpc2
 	g, gctx := errgroup.WithContext(ctx)
 	for i, server := range servers {
 		g.Go(func() error {
-			if err := server.Call(gctx, r.Method, r.Params, &results[i]); err != nil {
-				return err
-			}
-			return nil
+			return server.Call(gctx, r.Method, r.Params, &results[i])
 		})
 	}
 	if err := g.Wait(); err != nil {
@@ -194,10 +186,7 @@ func (h *ClientHandler) handleCodeActionRequest(ctx context.Context, r *jsonrpc2
 	g, gctx := errgroup.WithContext(ctx)
 	for i, server := range servers {
 		g.Go(func() error {
-			if err := server.Call(gctx, r.Method, r.Params, &results[i]); err != nil {
-				return err
-			}
-			return nil
+			return server.Call(gctx, r.Method, r.Params, &results[i])
 		})
 	}
 	if err := g.Wait(); err != nil {

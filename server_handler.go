@@ -10,8 +10,7 @@ import (
 
 type ServerHandler struct {
 	name         string
-	conn         Respondable
-	clientConn   Callable
+	clientConn   *jsonrpc2.Connection
 	diagRegistry *DiagnosticRegistry
 }
 
@@ -21,10 +20,6 @@ func NewServerHandler(name string, clientConn *jsonrpc2.Connection, diagRegistry
 		clientConn:   clientConn,
 		diagRegistry: diagRegistry,
 	}
-}
-
-func (h *ServerHandler) BindConnection(conn *jsonrpc2.Connection) {
-	h.conn = conn
 }
 
 func (h *ServerHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, error) {

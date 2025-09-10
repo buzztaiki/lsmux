@@ -43,7 +43,7 @@ func (c *ServerConnection) Close() error {
 type ServerConnectionRegistry struct {
 	servers  []*ServerConnection
 	nservers int
-	ready    chan (struct{})
+	ready    chan struct{}
 }
 
 func NewServerConnectionRegistry(nservers int) *ServerConnectionRegistry {
