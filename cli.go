@@ -12,7 +12,7 @@ import (
 	slogctx "github.com/veqryn/slog-context"
 )
 
-func CLI() error {
+func CLI(args []string) error {
 	configHome := os.Getenv("XDG_CONFIG_HOME")
 	if configHome == "" {
 		homeDir, err := os.UserHomeDir()
@@ -25,9 +25,10 @@ func CLI() error {
 	configPath := filepath.Join(configHome, "lsmux/config.yaml")
 	serverNamesValue := ""
 
-	flag.StringVar(&configPath, "config", configPath, "path to config file")
-	flag.StringVar(&serverNamesValue, "servers", serverNamesValue, "comma-separated server names to start (or empty to start all servers)")
-	flag.Parse()
+	flags := flag.NewFlagSet("lsmux", flag.ExitOnError)
+	flags.StringVar(&configPath, "config", configPath, "path to config file")
+	flags.StringVar(&serverNamesValue, "servers", serverNamesValue, "comma-separated server names to start (or empty to start all servers)")
+	flags.Parse(args)
 
 	var serverNames []string
 	for name := range strings.SplitSeq(serverNamesValue, ",") {
