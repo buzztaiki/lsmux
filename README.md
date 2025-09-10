@@ -58,7 +58,7 @@ Write it as follows for Eglot:
                 vue-mode vue-ts-mode)
                "lsmux" "--servers" "tsls,vuels,eslint"))
 (add-to-list 'eglot-server-programs
-             '((python-ts-mode python-mode) "lsmux" "--servers", "pyright,ruff"))
+             '((python-ts-mode python-mode) "lsmux" "--servers" "pyright,ruff"))
 ```
 
 ## Features
