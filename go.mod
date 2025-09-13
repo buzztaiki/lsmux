@@ -14,6 +14,7 @@ require (
 
 require (
 	github.com/go-logr/logr v1.4.3 // indirect
+	github.com/google/go-cmp v0.7.0 // indirect
 	golang.org/x/exp/event v0.0.0-20250819193227-8b4c13bb791b // indirect
 	golang.org/x/xerrors v0.0.0-20240903120638-7835f813f4da // indirect
 )
