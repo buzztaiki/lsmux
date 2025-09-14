@@ -89,4 +89,13 @@ func TestMerge(t *testing.T) {
 			}
 		})
 	}
+
+	t.Run("panic on nil dst", func(t *testing.T) {
+		defer func() {
+			if r := recover(); r == nil {
+				t.Fatal("expected panic, but not")
+			}
+		}()
+		Merge(nil, kv{"key": "value"})
+	})
 }

@@ -5,7 +5,13 @@ import (
 	"slices"
 )
 
+// Merge merges capabilities from src into dst.
+// dst should not be nil.
 func Merge(dst, src map[string]any) {
+	if dst == nil {
+		panic("dst should not be nil")
+	}
+
 	for k, v := range src {
 		if dv := dst[k]; dv == nil {
 			dst[k] = v
