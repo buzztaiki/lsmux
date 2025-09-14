@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"github.com/buzztaiki/lsmux/capability"
 	"github.com/myleshyson/lsprotocol-go/protocol"
 	"golang.org/x/exp/jsonrpc2"
 )
@@ -14,7 +15,7 @@ type ServerConnection struct {
 	Name                  string
 	conn                  *jsonrpc2.Connection
 	InitOptions           map[string]any
-	SupportedCapabilities map[string]struct{}
+	SupportedCapabilities capability.SupportedSet
 	Capabilities          *protocol.ServerCapabilities
 }
 
@@ -78,7 +79,7 @@ func (r *ServerConnectionRegistry) Servers() ServerConnectionList {
 func (l ServerConnectionList) FilterBySupportedMethod(method string) ServerConnectionList {
 	servers := []*ServerConnection{}
 	for _, s := range l {
-		if IsMethodSupported(method, s.SupportedCapabilities) {
+		if s.SupportedCapabilities.IsSupportedMethod(method) {
 			servers = append(servers, s)
 		}
 	}

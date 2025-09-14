@@ -5,6 +5,7 @@ go 1.24.6
 require (
 	dario.cat/mergo v1.0.2
 	github.com/goccy/go-yaml v1.18.0
+	github.com/google/go-cmp v0.7.0
 	github.com/google/uuid v1.6.0
 	github.com/myleshyson/lsprotocol-go v1.0.2
 	github.com/veqryn/slog-context v0.8.0

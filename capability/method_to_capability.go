@@ -1,42 +1,11 @@
-package lsmux
+package capability
 
-func IsMethodSupported(method string, supportedCaps map[string]struct{}) bool {
-	methodCap, useCap := MethodToCapability[method]
-	if !useCap {
-		return true
-	}
-
-	_, supported := supportedCaps[methodCap]
-	return supported
-}
-
-// CollectSupportedCapabilities returns a map of dot notated capability to whether it's supported or not.
-func CollectSupportedCapabilities(kvCaps map[string]any) map[string]struct{} {
-	res := map[string]struct{}{}
-	collectSupportedCapabilities("", kvCaps, res)
-	return res
-}
-
-func collectSupportedCapabilities(prefix string, kvCaps map[string]any, res map[string]struct{}) {
-	for k, v := range kvCaps {
-		switch v := v.(type) {
-		case map[string]any:
-			res[prefix+k] = struct{}{}
-			collectSupportedCapabilities(prefix+k+".", v, res)
-		case bool:
-			if v {
-				res[prefix+k] = struct{}{}
-			}
-		default:
-			if v != nil {
-				res[prefix+k] = struct{}{}
-			}
-		}
-	}
-}
-
-// TODO go generate?
-// curl -sSf https://raw.githubusercontent.com/microsoft/vscode-languageserver-node/refs/heads/main/protocol/metaModel.json | jq '.requests[]|select(.serverCapability)|"\t\(.method|@json): \(.serverCapability|@json),"' -r
+// MethodToCapability maps LSP method names to their corresponding server capabilities.
+// genereted by:
+//
+//	curl -sSf https://raw.githubusercontent.com/microsoft/vscode-languageserver-node/refs/heads/main/protocol/metaModel.json | jq '.requests[]|select(.serverCapability)|"\t\(.method|@json): \(.serverCapability|@json),"' -r
+//
+// TODO: go generate?
 var MethodToCapability = map[string]string{
 	"textDocument/implementation":            "implementationProvider",
 	"textDocument/typeDefinition":            "typeDefinitionProvider",
