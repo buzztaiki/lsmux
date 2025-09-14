@@ -114,7 +114,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 		// NOTE: mergo.Merge did not union array values
 		mergo.Merge(&merged, kvCaps)
 		server.Capabilities = &typedRes.Capabilities
-		server.SupportedCapabilities = capability.CollectSupportedCapabilities(kvCaps)
+		server.SupportedCapabilities = capability.CollectSupported(kvCaps)
 
 		slog.DebugContext(ctx, "server capabilities",
 			"server", server.Name,
