@@ -77,7 +77,7 @@ func (h *ClientHandler) Handle(ctx context.Context, r *jsonrpc2.Request) (any, e
 }
 
 func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2.Request, servers ServerConnectionList) (any, error) {
-	var merged map[string]any
+	merged := map[string]any{}
 	for _, server := range servers {
 		var kvParams map[string]any
 		if err := json.Unmarshal(r.Params, &kvParams); err != nil {
@@ -111,8 +111,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 		}
 
 		// respect the preceding value
-		// NOTE: mergo.Merge did not union array values
-		mergo.Merge(&merged, kvCaps)
+		capability.Merge(merged, kvCaps)
 		server.Capabilities = &typedRes.Capabilities
 		server.SupportedCapabilities = capability.CollectSupported(kvCaps)
 
