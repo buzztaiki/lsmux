@@ -1,17 +1,19 @@
 package capability
 
-func IsMethodSupported(method string, supportedCaps map[string]struct{}) bool {
+type SupportedSet map[string]struct{}
+
+func (s SupportedSet) IsSupportedMethod(method string) bool {
 	methodCap, useCap := MethodToCapability[method]
 	if !useCap {
 		return true
 	}
 
-	_, supported := supportedCaps[methodCap]
+	_, supported := s[methodCap]
 	return supported
 }
 
 // CollectSupported returns a map of dot notated capability to whether it's supported or not.
-func CollectSupported(kvCaps map[string]any) map[string]struct{} {
+func CollectSupported(kvCaps map[string]any) SupportedSet {
 	res := map[string]struct{}{}
 	collectSupported("", kvCaps, res)
 	return res
