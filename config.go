@@ -2,6 +2,7 @@ package lsmux
 
 import (
 	"fmt"
+	"io"
 	"log/slog"
 	"os"
 	"slices"
@@ -21,20 +22,30 @@ type ServerConfig struct {
 	InitializationOptions map[string]any `yaml:"initializationOptions"`
 }
 
-func LoadConfig(fname string, serverNames []string) (*Config, error) {
-	data, err := os.ReadFile(fname)
+func LoadConfigFile(fname string, serverNames []string) (*Config, error) {
+	r, err := os.Open(fname)
 	if err != nil {
 		return nil, err
 	}
+	defer r.Close()
 
+	return LoadConfig(r, serverNames)
+}
+
+func LoadConfig(r io.Reader, serverNames []string) (*Config, error) {
 	cfg := Config{
 		LogLevel: slog.LevelInfo,
 	}
-	if err := yaml.Unmarshal(data, &cfg); err != nil {
+
+	if err := yaml.NewDecoder(r).Decode(&cfg); err != nil {
 		return nil, err
 	}
 
 	for i := range cfg.Servers {
+		if cfg.Servers[i].Command == "" {
+			return nil, fmt.Errorf("servers[%d]: command is required", i)
+		}
+
 		if cfg.Servers[i].Name == "" {
 			cfg.Servers[i].Name = cfg.Servers[i].Command
 		}
@@ -54,5 +65,5 @@ func LoadConfig(fname string, serverNames []string) (*Config, error) {
 	}
 	cfg.Servers = servers
 
-	return &cfg, err
+	return &cfg, nil
 }
