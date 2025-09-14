@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"github.com/buzztaiki/lsmux/capability"
 	"github.com/myleshyson/lsprotocol-go/protocol"
 	"golang.org/x/exp/jsonrpc2"
 )
@@ -78,7 +79,7 @@ func (r *ServerConnectionRegistry) Servers() ServerConnectionList {
 func (l ServerConnectionList) FilterBySupportedMethod(method string) ServerConnectionList {
 	servers := []*ServerConnection{}
 	for _, s := range l {
-		if IsMethodSupported(method, s.SupportedCapabilities) {
+		if capability.IsMethodSupported(method, s.SupportedCapabilities) {
 			servers = append(servers, s)
 		}
 	}

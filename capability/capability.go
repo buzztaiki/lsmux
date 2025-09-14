@@ -1,4 +1,4 @@
-package lsmux
+package capability
 
 func IsMethodSupported(method string, supportedCaps map[string]struct{}) bool {
 	methodCap, useCap := MethodToCapability[method]

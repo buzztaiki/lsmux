@@ -10,6 +10,7 @@ import (
 	"slices"
 
 	"dario.cat/mergo"
+	"github.com/buzztaiki/lsmux/capability"
 	"github.com/myleshyson/lsprotocol-go/protocol"
 	"golang.org/x/exp/jsonrpc2"
 	"golang.org/x/sync/errgroup"
@@ -113,7 +114,7 @@ func (h *ClientHandler) handleInitializeRequest(ctx context.Context, r *jsonrpc2
 		// NOTE: mergo.Merge did not union array values
 		mergo.Merge(&merged, kvCaps)
 		server.Capabilities = &typedRes.Capabilities
-		server.SupportedCapabilities = CollectSupportedCapabilities(kvCaps)
+		server.SupportedCapabilities = capability.CollectSupportedCapabilities(kvCaps)
 
 		slog.DebugContext(ctx, "server capabilities",
 			"server", server.Name,
