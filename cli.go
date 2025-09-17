@@ -3,6 +3,7 @@ package lsmux
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"os"
 	"path/filepath"
@@ -39,9 +40,9 @@ func CLI(args []string) error {
 		serverNames = append(serverNames, name)
 	}
 
-	cfg, err := LoadConfig(configPath, serverNames)
+	cfg, err := LoadConfigFile(configPath, serverNames)
 	if err != nil {
-		return err
+		return fmt.Errorf("failed to load config file %q: %w", configPath, err)
 	}
 
 	logHandler := slogctx.NewHandler(
