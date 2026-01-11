@@ -74,6 +74,7 @@ Write it as follows for Eglot:
 - https://github.com/thefrontside/lspx
 - https://gitlab.com/tmtms/lsp_router
 - https://github.com/garyo/lsp-multiplexer
+- https://github.com/joaotavora/rassumfrassum
 
 ## License
 
